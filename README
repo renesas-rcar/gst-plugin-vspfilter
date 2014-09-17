@@ -1,0 +1,45 @@
+
+  gstreamer-vspfilter
+
+  Copyright (C) 2014 Renesas Electronics Corporation
+
+
+License
+-------
+
+gstreamer-vspfilter is available under the terms of
+the GNU Lesser General Public License v2.1+
+
+
+Overview
+--------
+
+This is a GStreamer plugin that can use the color conversion and
+scaling with the hardware acceleration on R-Car SoC. This feature is
+available through the dmabuf method or userptr method of the V4L2 driver.
+Both of the methods are used for the buffer passing between
+the GStreamer plugin and the V4L2 in order to do zero-copy processing.
+
+
+How to build
+------------
+
+Run the following scripts.
+Please refer to the output of ./configure --help to see if any options apply
+to you.
+
+$ autoreconf -vif
+$ ./configure
+$ make
+
+
+Default setting for which device files the plugin uses
+------------------------------------------------------
+
+You can specify the default input and output devices the plugin uses
+by setting /etc/gstvspfilter.conf as follows.
+
+---- from here ---
+input-device-name=/dev/video0
+output-device-name=/dev/video1
+--- to here ---
