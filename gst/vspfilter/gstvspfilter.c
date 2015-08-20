@@ -1668,7 +1668,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
       for (i = 0; i < vsp_info->n_planes[CAP]; i++) {
         out_planes[i].m.userptr =
             (unsigned long) out_vframe_info->vframe.frame->map[i].data;
-        out_planes[i].length = out_vframe_info->vframe.frame->map[i].size;
+        out_planes[i].length = out_vframe_info->vframe.frame->map[i].maxsize;
       }
       break;
     case V4L2_MEMORY_DMABUF:
