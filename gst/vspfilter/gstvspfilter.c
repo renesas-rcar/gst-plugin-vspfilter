@@ -1639,27 +1639,22 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   }
 
   /* set up planes for queuing input buffers */
-  switch (in_vframe_info->io) {
+  for (i = 0; i < vsp_info->n_planes[OUT]; i++) {
+    switch (in_vframe_info->io) {
     case V4L2_MEMORY_USERPTR:
-      for (i = 0; i < vsp_info->n_planes[OUT]; i++) {
-        in_planes[i].m.userptr =
-            (unsigned long) in_vframe_info->vframe.frame->data[i];
-        in_planes[i].length = in_info->stride[0] *
-            GST_VIDEO_FRAME_COMP_HEIGHT (in_vframe_info->vframe.frame, i);
-      }
+      in_planes[i].m.userptr =
+          (unsigned long) in_vframe_info->vframe.frame->data[i];
       break;
     case V4L2_MEMORY_DMABUF:
-      for (i = 0; i < vsp_info->n_planes[OUT]; i++) {
-        in_planes[i].m.fd = in_vframe_info->vframe.dmafd[i];
-        /* In the kernel space, the length (memory size) is obtained from
-           the dmabuf descriptor when the length is specified as 0. */
-        in_planes[i].length = 0;
-        in_planes[i].data_offset = 0;
-      }
+      in_planes[i].m.fd = in_vframe_info->vframe.dmafd[i];
       break;
     default:
       GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
       return GST_FLOW_ERROR;
+    }
+    in_planes[i].length = in_info->stride[0] *
+        GST_VIDEO_INFO_COMP_HEIGHT (in_info, i);
+    in_planes[i].bytesused = in_planes[i].length;
   }
 
   /* set up planes for queuing output buffers */
