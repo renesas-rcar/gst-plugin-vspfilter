@@ -134,7 +134,7 @@ static const struct extensions_t exts[] = {
   {GST_VIDEO_FORMAT_xRGB, V4L2_PIX_FMT_RGB32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
   {GST_VIDEO_FORMAT_BGRA, V4L2_PIX_FMT_BGR32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
   {GST_VIDEO_FORMAT_BGRx, V4L2_PIX_FMT_BGR32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_YV12, V4L2_PIX_FMT_YUV420M, V4L2_MBUS_FMT_AYUV8_1X32, 2},
+  {GST_VIDEO_FORMAT_I420, V4L2_PIX_FMT_YUV420M, V4L2_MBUS_FMT_AYUV8_1X32, 3},
   {GST_VIDEO_FORMAT_NV12, V4L2_PIX_FMT_NV12M, V4L2_MBUS_FMT_AYUV8_1X32, 2},
   {GST_VIDEO_FORMAT_UYVY, V4L2_PIX_FMT_UYVY, V4L2_MBUS_FMT_AYUV8_1X32, 1},
 };
@@ -1652,7 +1652,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
       GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
       return GST_FLOW_ERROR;
     }
-    in_planes[i].length = in_info->stride[0] *
+    in_planes[i].length = in_stride[i] *
         GST_VIDEO_INFO_COMP_HEIGHT (in_info, i);
     in_planes[i].bytesused = in_planes[i].length;
   }
