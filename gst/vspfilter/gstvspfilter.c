@@ -1267,22 +1267,26 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   in_n_mem = gst_buffer_n_memory (inbuf);
   out_n_mem = gst_buffer_n_memory (outbuf);
 
-  for (i = 0; i < in_n_mem; i++) {
+  for (i = 0; i < in_n_mem; i++)
     in_gmem[i] = gst_buffer_get_memory (inbuf, i);
 
-    /* Set row stride in bytes */
-    if (in_meta)
+  if (in_meta) {
+    for (i = 0; i < in_meta->n_planes; i++) {
+      /* Set row stride in bytes */
       in_stride[i] = GST_VIDEO_FORMAT_INFO_STRIDE (filter->in_info.finfo,
           in_meta->stride, i);
+    }
   }
 
-  for (i = 0; i < out_n_mem; i++) {
+  for (i = 0; i < out_n_mem; i++)
     out_gmem[i] = gst_buffer_get_memory (outbuf, i);
 
-    /* Set row stride in bytes */
-    if (out_meta)
+  if (out_meta) {
+    for (i = 0; i < out_meta->n_planes; i++) {
+      /* Set row stride in bytes */
       out_stride[i] = GST_VIDEO_FORMAT_INFO_STRIDE (filter->out_info.finfo,
           out_meta->stride, i);
+    }
   }
 
   if (gst_is_dmabuf_memory (in_gmem[0])) {
