@@ -520,8 +520,7 @@ open_media_device (GstVspFilter * space)
 
   dev = strrchr (vsp_info->dev_name[CAP], '/') + 1;
   for (i = 0; i < 256; i++) {
-    sprintf (path, "/sys/class/video4linux/%s/device/media%d",
-			dev, i);
+    sprintf (path, "/sys/class/video4linux/%s/device/media%d", dev, i);
     if (0 == stat (path, &st)) {
       sprintf (path, "/dev/media%d", i);
       GST_DEBUG_OBJECT (space, "media device = %s", path);
@@ -1645,16 +1644,16 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   /* set up planes for queuing input buffers */
   for (i = 0; i < vsp_info->n_planes[OUT]; i++) {
     switch (in_vframe_info->io) {
-    case V4L2_MEMORY_USERPTR:
-      in_planes[i].m.userptr =
-          (unsigned long) in_vframe_info->vframe.frame->data[i];
-      break;
-    case V4L2_MEMORY_DMABUF:
-      in_planes[i].m.fd = in_vframe_info->vframe.dmafd[i];
-      break;
-    default:
-      GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
-      return GST_FLOW_ERROR;
+      case V4L2_MEMORY_USERPTR:
+        in_planes[i].m.userptr =
+            (unsigned long) in_vframe_info->vframe.frame->data[i];
+        break;
+      case V4L2_MEMORY_DMABUF:
+        in_planes[i].m.fd = in_vframe_info->vframe.dmafd[i];
+        break;
+      default:
+        GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
+        return GST_FLOW_ERROR;
     }
     in_planes[i].length = in_stride[i] *
         GST_VIDEO_INFO_COMP_HEIGHT (in_info, i);
