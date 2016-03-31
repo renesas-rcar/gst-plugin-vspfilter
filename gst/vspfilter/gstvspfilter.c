@@ -33,6 +33,7 @@
 #endif
 
 #include "gstvspfilter.h"
+#include "vspfilterutils.h"
 
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
@@ -59,8 +60,6 @@ enum
   PROP_VSP_DEVFILE_INPUT,
   PROP_VSP_DEVFILE_OUTPUT,
 };
-
-#define CLEAR(x) memset (&(x), 0, sizeof (x))
 
 #define CSP_VIDEO_CAPS GST_VIDEO_CAPS_MAKE (GST_VIDEO_FORMATS_ALL)
 
@@ -116,61 +115,6 @@ gst_vsp_filter_caps_remove_format_info (GstCaps * caps)
   }
 
   return res;
-}
-
-struct extensions_t
-{
-  GstVideoFormat format;
-  guint fourcc;
-  enum v4l2_mbus_pixelcode code;
-  int n_planes;
-};
-
-static const struct extensions_t exts[] = {
-  {GST_VIDEO_FORMAT_RGB16, V4L2_PIX_FMT_RGB565, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_RGB, V4L2_PIX_FMT_RGB24, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_BGR, V4L2_PIX_FMT_BGR24, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_ARGB, V4L2_PIX_FMT_RGB32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_xRGB, V4L2_PIX_FMT_RGB32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_BGRA, V4L2_PIX_FMT_BGR32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_BGRx, V4L2_PIX_FMT_BGR32, V4L2_MBUS_FMT_ARGB8888_1X32, 1},
-  {GST_VIDEO_FORMAT_I420, V4L2_PIX_FMT_YUV420M, V4L2_MBUS_FMT_AYUV8_1X32, 3},
-  {GST_VIDEO_FORMAT_NV12, V4L2_PIX_FMT_NV12M, V4L2_MBUS_FMT_AYUV8_1X32, 2},
-  {GST_VIDEO_FORMAT_UYVY, V4L2_PIX_FMT_UYVY, V4L2_MBUS_FMT_AYUV8_1X32, 1},
-};
-
-static gint
-set_colorspace (GstVideoFormat vid_fmt, guint * fourcc,
-    enum v4l2_mbus_pixelcode *code, guint * n_planes)
-{
-  int nr_exts = sizeof (exts) / sizeof (exts[0]);
-  int i;
-
-  for (i = 0; i < nr_exts; i++) {
-    if (vid_fmt == exts[i].format) {
-      if (fourcc)
-        *fourcc = exts[i].fourcc;
-      if (code)
-        *code = exts[i].code;
-      if (n_planes)
-        *n_planes = exts[i].n_planes;
-      return 0;
-    }
-  }
-
-  return -1;
-}
-
-static gint
-xioctl (gint fd, gint request, void *arg)
-{
-  int r;
-
-  do
-    r = ioctl (fd, request, arg);
-  while (-1 == r && EINTR == errno);
-
-  return r;
 }
 
 static gboolean
@@ -382,86 +326,6 @@ gst_vsp_filter_transform_meta (GstBaseTransform * trans, GstBuffer * outbuf,
     GstMeta * meta, GstBuffer * inbuf)
 {
   /* copy other metadata */
-  return TRUE;
-}
-
-static gboolean
-request_buffers (GstVspFilter * space, gint fd, gint index,
-    enum v4l2_buf_type buftype, gint n_bufs, enum v4l2_memory io[MAX_DEVICES])
-{
-  struct v4l2_requestbuffers req;
-  GstVspFilterVspInfo *vsp_info;
-
-  vsp_info = space->vsp_info;
-
-  /* input buffer */
-  CLEAR (req);
-
-  req.count = n_bufs;
-  req.type = buftype;
-  req.memory = io[index];
-
-  if (-1 == xioctl (fd, VIDIOC_REQBUFS, &req)) {
-    GST_ERROR_OBJECT (space, "VIDIOC_REQBUFS for %s errno=%d",
-        vsp_info->dev_name[index], errno);
-    return FALSE;
-  }
-
-  GST_DEBUG_OBJECT (space, "req.count = %d", req.count);
-
-  return TRUE;
-}
-
-static gboolean
-set_format (GstVspFilter * space, gint fd, guint width, guint height,
-    gint stride[GST_VIDEO_MAX_PLANES], gint index, guint captype,
-    enum v4l2_buf_type buftype, enum v4l2_memory io[MAX_DEVICES])
-{
-  GstVspFilterVspInfo *vsp_info;
-  struct v4l2_format fmt;
-  gint i;
-
-  vsp_info = space->vsp_info;
-
-  CLEAR (fmt);
-
-  fmt.type = buftype;
-  fmt.fmt.pix_mp.width = width;
-  fmt.fmt.pix_mp.height = height;
-  fmt.fmt.pix_mp.pixelformat = vsp_info->format[index];
-  fmt.fmt.pix_mp.field = V4L2_FIELD_NONE;
-
-  for (i = 0; i < vsp_info->n_planes[index]; i++) {
-    GST_DEBUG_OBJECT (space, "Set bytesperline = %d (index = %d plane = %d)\n",
-        stride[i], index, i);
-    fmt.fmt.pix_mp.plane_fmt[i].bytesperline = stride[i];
-  }
-
-  if (-1 == xioctl (fd, VIDIOC_S_FMT, &fmt)) {
-    GST_ERROR_OBJECT (space, "VIDIOC_S_FMT for %s failed.",
-        vsp_info->dev_name[index]);
-    return FALSE;
-  }
-
-  GST_DEBUG_OBJECT (space, "pixelformat = %c%c%c%c (%c%c%c%c)",
-      (fmt.fmt.pix_mp.pixelformat >> 0) & 0xff,
-      (fmt.fmt.pix_mp.pixelformat >> 8) & 0xff,
-      (fmt.fmt.pix_mp.pixelformat >> 16) & 0xff,
-      (fmt.fmt.pix_mp.pixelformat >> 24) & 0xff,
-      (vsp_info->format[index] >> 0) & 0xff,
-      (vsp_info->format[index] >> 8) & 0xff,
-      (vsp_info->format[index] >> 16) & 0xff,
-      (vsp_info->format[index] >> 24) & 0xff);
-  GST_DEBUG_OBJECT (space, "num_planes = %d", fmt.fmt.pix_mp.num_planes);
-
-  for (i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
-    GST_DEBUG_OBJECT (space, "plane_fmt[%d].sizeimage = %d",
-        i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
-    GST_DEBUG_OBJECT (space, "plane_fmt[%d].bytesperline = %d",
-        i, fmt.fmt.pix_mp.plane_fmt[i].bytesperline);
-    vsp_info->plane_stride[index][i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
-  }
-
   return TRUE;
 }
 
@@ -704,6 +568,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
   GstVspFilterVspInfo *vsp_info;
   gint ret;
   gchar tmp[256];
+  guint n_bufs;
 
   vsp_info = space->vsp_info;
 
@@ -722,29 +587,31 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
   GST_DEBUG_OBJECT (space, "set_colorspace[CAP]: format=%d code=%d n_planes=%d",
       vsp_info->format[CAP], vsp_info->code[CAP], vsp_info->n_planes[CAP]);
 
-  if (!set_format (space, vsp_info->v4lout_fd, in_width, in_height,
-          in_stride, OUT, V4L2_CAP_VIDEO_OUTPUT_MPLANE,
-          V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io)) {
+  n_bufs = N_BUFFERS;
+
+  if (!set_format (vsp_info->v4lout_fd, in_width, in_height,
+          vsp_info->format[OUT],
+          in_stride, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT])) {
     GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
         vsp_info->dev_name[OUT], in_width, in_height);
     return FALSE;
   }
-  if (!request_buffers (space, vsp_info->v4lout_fd, OUT,
-          V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, N_BUFFERS, io)) {
+  if (!request_buffers (vsp_info->v4lout_fd,
+          V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, &n_bufs, io[OUT])) {
     GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
         vsp_info->dev_name[OUT]);
     return FALSE;
   }
 
-  if (!set_format (space, vsp_info->v4lcap_fd, out_width, out_height,
-          out_stride, CAP, V4L2_CAP_VIDEO_CAPTURE_MPLANE,
-          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io)) {
+  if (!set_format (vsp_info->v4lcap_fd, out_width, out_height,
+          vsp_info->format[CAP],
+          out_stride, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io[CAP])) {
     GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
         vsp_info->dev_name[CAP], out_width, out_height);
     return FALSE;
   }
-  if (!request_buffers (space, vsp_info->v4lcap_fd, CAP,
-          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, N_BUFFERS, io)) {
+  if (!request_buffers (vsp_info->v4lcap_fd,
+          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, &n_bufs, io[CAP])) {
     GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
         vsp_info->dev_name[CAP]);
     return FALSE;
