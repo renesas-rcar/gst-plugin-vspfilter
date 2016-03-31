@@ -2,6 +2,7 @@ plugin_LTLIBRARIES = libgstvspfilter.la
 
 libgstvspfilter_la_SOURCES =  \
 	gstvspfilter.c \
+	vspfilterpool.c \
 	vspfilterutils.c
 
 libgstvspfilter_la_CFLAGS = \
@@ -18,4 +19,5 @@ libgstvspfilter_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 
 noinst_HEADERS = \
 	gstvspfilter.h \
+	vspfilterpool.h \
 	vspfilterutils.h
