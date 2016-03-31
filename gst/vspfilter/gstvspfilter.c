@@ -34,6 +34,7 @@
 
 #include "gstvspfilter.h"
 #include "vspfilterutils.h"
+#include "vspfilterpool.h"
 
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
@@ -59,6 +60,8 @@ enum
   PROP_0,
   PROP_VSP_DEVFILE_INPUT,
   PROP_VSP_DEVFILE_OUTPUT,
+  PROP_INPUT_IO_MODE,
+  PROP_OUTPUT_IO_MODE,
 };
 
 #define CSP_VIDEO_CAPS GST_VIDEO_CAPS_MAKE (GST_VIDEO_FORMATS_ALL)
@@ -86,7 +89,24 @@ static GstFlowReturn gst_vsp_filter_transform_frame_process (GstVideoFilter *
     filter, GstVspFilterFrameInfo * in_vframe_info,
     GstVspFilterFrameInfo * out_vframe_info,
     gint in_stride[GST_VIDEO_MAX_PLANES],
-    gint out_stride[GST_VIDEO_MAX_PLANES]);
+    gint out_stride[GST_VIDEO_MAX_PLANES], guint in_index, guint out_index);
+
+#define GST_TYPE_VSPFILTER_IO_MODE (gst_vsp_filter_io_mode_get_type ())
+static GType
+gst_vsp_filter_io_mode_get_type (void)
+{
+  static GType vspfilter_io_mode = 0;
+
+  if (!vspfilter_io_mode) {
+    static const GEnumValue io_modes[] = {
+      {GST_VSPFILTER_IO_AUTO, "GST_VSPFILTER_IO_AUTO", "auto (dmabuf or mmap)"},
+      {GST_VSPFILTER_IO_USERPTR, "GST_VSPFILTER_IO_USERPTR", "userptr"},
+      {0, NULL, NULL}
+    };
+    vspfilter_io_mode = g_enum_register_static ("GstVspfilterIOMode", io_modes);
+  }
+  return vspfilter_io_mode;
+}
 
 /* copies the given caps */
 static GstCaps *
@@ -562,8 +582,9 @@ get_wpf_output_entity_name (GstVspFilter * space, gchar * wpf_output_name,
 static gboolean
 set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
     gint in_height, gint in_stride[GST_VIDEO_MAX_PLANES],
-    GstVideoFormat out_fmt, gint out_width, gint out_height,
-    gint out_stride[GST_VIDEO_MAX_PLANES], enum v4l2_memory io[MAX_DEVICES])
+    gboolean need_in_setfmt, GstVideoFormat out_fmt, gint out_width,
+    gint out_height, gint out_stride[GST_VIDEO_MAX_PLANES],
+    gboolean need_out_setfmt, enum v4l2_memory io[MAX_DEVICES])
 {
   GstVspFilterVspInfo *vsp_info;
   gint ret;
@@ -589,32 +610,38 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
 
   n_bufs = N_BUFFERS;
 
-  if (!set_format (vsp_info->v4lout_fd, in_width, in_height,
-          vsp_info->format[OUT],
-          in_stride, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT])) {
-    GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
-        vsp_info->dev_name[OUT], in_width, in_height);
-    return FALSE;
-  }
-  if (!request_buffers (vsp_info->v4lout_fd,
-          V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, &n_bufs, io[OUT])) {
-    GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
-        vsp_info->dev_name[OUT]);
-    return FALSE;
+  if (need_in_setfmt) {
+    if (!set_format (vsp_info->v4lout_fd, in_width, in_height,
+            vsp_info->format[OUT],
+            in_stride, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT])) {
+      GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
+          vsp_info->dev_name[OUT], in_width, in_height);
+      return FALSE;
+    }
+
+    if (!request_buffers (vsp_info->v4lout_fd,
+            V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, &n_bufs, io[OUT])) {
+      GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
+          vsp_info->dev_name[OUT]);
+      return FALSE;
+    }
   }
 
-  if (!set_format (vsp_info->v4lcap_fd, out_width, out_height,
-          vsp_info->format[CAP],
-          out_stride, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io[CAP])) {
-    GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
-        vsp_info->dev_name[CAP], out_width, out_height);
-    return FALSE;
-  }
-  if (!request_buffers (vsp_info->v4lcap_fd,
-          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, &n_bufs, io[CAP])) {
-    GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
-        vsp_info->dev_name[CAP]);
-    return FALSE;
+  if (need_out_setfmt) {
+    if (!set_format (vsp_info->v4lcap_fd, out_width, out_height,
+            vsp_info->format[CAP],
+            out_stride, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io[CAP])) {
+      GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
+          vsp_info->dev_name[CAP], out_width, out_height);
+      return FALSE;
+    }
+
+    if (!request_buffers (vsp_info->v4lcap_fd,
+            V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, &n_bufs, io[CAP])) {
+      GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
+          vsp_info->dev_name[CAP]);
+      return FALSE;
+    }
   }
 
   sprintf (tmp, "%s %s", vsp_info->ip_name, vsp_info->entity_name[OUT]);
@@ -1014,9 +1041,11 @@ static GstStateChangeReturn
 gst_vsp_filter_change_state (GstElement * element, GstStateChange transition)
 {
   GstVspFilter *space;
+  GstVspFilterVspInfo *vsp_info;
   GstStateChangeReturn ret;
 
   space = GST_VSP_FILTER_CAST (element);
+  vsp_info = space->vsp_info;
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
@@ -1035,6 +1064,8 @@ gst_vsp_filter_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_READY_TO_NULL:
+      g_clear_object (&space->in_pool);
+      g_clear_object (&space->out_pool);
       gst_vsp_filter_vsp_device_deinit (space);
       break;
     default:
@@ -1044,22 +1075,44 @@ gst_vsp_filter_change_state (GstElement * element, GstStateChange transition)
   return ret;
 }
 
+static GstBufferPool *
+gst_vsp_filter_setup_pool (gint fd, enum v4l2_buf_type buftype, GstCaps * caps,
+    gsize size)
+{
+  GstBufferPool *pool;
+  GstStructure *structure;
+
+  pool = vspfilter_buffer_pool_new (fd, buftype);
+
+  structure = gst_buffer_pool_get_config (pool);
+  gst_buffer_pool_config_set_params (structure, caps, size, 3, 3);
+  if (!gst_buffer_pool_set_config (pool, structure)) {
+    gst_object_unref (pool);
+    return FALSE;
+  }
+
+  return pool;
+}
+
 /* configure the allocation query that was answered downstream, we can configure
  * some properties on it. Only called when not in passthrough mode. */
 static gboolean
 gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
 {
   GstVspFilter *space;
+  GstVspFilterVspInfo *vsp_info;
   GstBufferPool *pool = NULL;
   GstAllocator *allocator;
   guint n_allocators;
   guint dmabuf_pool_pos = 0;
+  gboolean have_dmabuf = FALSE;
   GstStructure *config;
   guint min, max, size;
   gboolean update_pool;
   guint i;
 
   space = GST_VSP_FILTER_CAST (trans);
+  vsp_info = space->vsp_info;
 
   n_allocators = gst_query_get_n_allocation_params (query);
   for (i = 0; i < n_allocators; i++) {
@@ -1068,11 +1121,39 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     if (g_strcmp0 (allocator->mem_type, GST_ALLOCATOR_DMABUF) == 0) {
       GST_DEBUG_OBJECT (space, "found a dmabuf allocator");
       dmabuf_pool_pos = i;
+      have_dmabuf = TRUE;
       gst_object_unref (allocator);
       break;
     }
 
     gst_object_unref (allocator);
+  }
+
+  if (space->prop_out_mode == GST_VSPFILTER_IO_AUTO && !have_dmabuf) {
+    if (!space->out_pool) {
+      GstCaps *caps;
+      GstVideoInfo vinfo;
+
+      gst_query_parse_allocation (query, &caps, NULL);
+      gst_video_info_init (&vinfo);
+      gst_video_info_from_caps (&vinfo, caps);
+
+      GST_DEBUG_OBJECT (space, "create new pool");
+      space->out_pool = gst_vsp_filter_setup_pool (vsp_info->v4lcap_fd,
+          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, caps, vinfo.size);
+      if (!space->out_pool) {
+        GST_ERROR_OBJECT (space, "failed to setup pool");
+        return FALSE;
+      }
+    }
+
+    pool = gst_object_ref (space->out_pool);
+    GST_DEBUG_OBJECT (space, "use our pool %p", pool);
+    config = gst_buffer_pool_get_config (pool);
+    gst_buffer_pool_config_get_params (config, NULL, &size, &min, &max);
+    gst_structure_free (config);
+    update_pool = (gst_query_get_n_allocation_pools (query) > 0) ? TRUE : FALSE;
+    goto set_pool;
   }
 
   /* Delete buffer pools registered before the pool of dmabuf in
@@ -1086,25 +1167,19 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min, &max);
 
     update_pool = TRUE;
-  } else {
-    GstCaps *outcaps;
-    GstVideoInfo vinfo;
-
-    gst_query_parse_allocation (query, &outcaps, NULL);
-    gst_video_info_init (&vinfo);
-    gst_video_info_from_caps (&vinfo, outcaps);
-    size = vinfo.size;
-    min = max = 0;
-    update_pool = FALSE;
   }
 
-  if (!pool)
-    pool = gst_video_buffer_pool_new ();
+  /* We need a bufferpool for userptr. */
+  if (!pool) {
+    GST_ERROR_OBJECT (space, "no pool");
+    return FALSE;
+  }
 
   config = gst_buffer_pool_get_config (pool);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
   gst_buffer_pool_set_config (pool, config);
 
+set_pool:
   if (update_pool)
     gst_query_set_nth_allocation_pool (query, 0, pool, size, min, max);
   else
@@ -1116,82 +1191,196 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
       query);
 }
 
+static inline gint
+get_stride (GstBuffer * buffer, GstVideoInfo * vinfo, gint index)
+{
+  GstVideoMeta *meta;
+
+  meta = gst_buffer_get_video_meta (buffer);
+  return (meta) ?
+      GST_VIDEO_FORMAT_INFO_STRIDE (vinfo->finfo, meta->stride, index) :
+      vinfo->stride[index];
+}
+
+static void
+gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
+    GstVideoFrame * src_frame, GstVideoInfo * vinfo)
+{
+  GstVideoMeta meta;
+  gint width, height;
+  guint8 *sp, *dp;
+  gint ss, ds;
+  gint i, j;
+
+  for (i = 0; i < GST_VIDEO_FRAME_N_PLANES (src_frame); i++) {
+    sp = src_frame->data[i];
+    dp = dest_frame->data[i];
+
+    width = GST_VIDEO_FRAME_COMP_WIDTH (dest_frame, i) *
+        GST_VIDEO_FRAME_COMP_PSTRIDE (dest_frame, i);
+    height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, i);
+
+    ss = get_stride (src_frame->buffer, vinfo, i);
+    ds = get_stride (dest_frame->buffer, vinfo, i);
+
+    for (j = 0; j < height; j++) {
+      memcpy (dp, sp, width);
+      dp += ds;
+      sp += ss;
+    }
+  }
+}
+
+static GstFlowReturn
+gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
+    GstVspfilterIOMode io_mode, GstBuffer * buffer,
+    GstMemory * gmem[GST_VIDEO_MAX_PLANES], gint n_mem, GstBufferPool * pool,
+    GstVideoInfo * vinfo, GstVspFilterFrameInfo * vframe_info, guint * index)
+{
+  GstBuffer *mmap_buf;
+  GstVideoFrame frame;
+  GstFlowReturn ret;
+  guint _index;
+  gint i;
+
+  switch (io_mode) {
+    case GST_VSPFILTER_IO_AUTO:
+      _index = vspfilter_buffer_pool_get_buffer_index (buffer);
+
+      if (_index != VSPFILTER_INDEX_INVALID) {
+        /* This buffer is from our MMAP buffer pool. */
+        vframe_info->io = V4L2_MEMORY_MMAP;
+        *index = _index;
+      } else if (gst_is_dmabuf_memory (gmem[0])) {
+        vframe_info->io = V4L2_MEMORY_DMABUF;
+        for (i = 0; i < n_mem; i++)
+          vframe_info->vframe.dmafd[i] = gst_dmabuf_memory_get_fd (gmem[i]);
+        *index = 0;
+      } else {
+        /* Only input buffers can pass this route. */
+        GST_LOG_OBJECT (space, "Copy buffer %p to MMAP memory", buffer);
+
+        if (!gst_buffer_pool_set_active (pool, TRUE))
+          goto activate_failed;
+
+        /* Get a buffer from our MMAP buffer pool */
+        ret = gst_buffer_pool_acquire_buffer (pool, &mmap_buf, NULL);
+        if (ret != GST_FLOW_OK)
+          goto no_buffer;
+
+        if (!gst_video_frame_map (&frame, vinfo, buffer, GST_MAP_READ))
+          goto invalid_buffer;
+        if (!gst_video_frame_map (&vframe_info->vframe.frame, vinfo, mmap_buf,
+                GST_MAP_WRITE)) {
+          gst_video_frame_unmap (&frame);
+          goto invalid_buffer;
+        }
+        gst_buffer_unref (mmap_buf);
+
+        gst_vsp_filter_copy_frame (&vframe_info->vframe.frame, &frame, vinfo);
+
+        gst_video_frame_unmap (&frame);
+
+        vframe_info->io = V4L2_MEMORY_MMAP;
+        *index = vspfilter_buffer_pool_get_buffer_index (mmap_buf);
+      }
+      break;
+    case GST_VSPFILTER_IO_USERPTR:
+      if (!gst_video_frame_map (&vframe_info->vframe.frame, vinfo, buffer,
+              GST_MAP_READ))
+        goto invalid_buffer;
+
+      vframe_info->io = V4L2_MEMORY_USERPTR;
+      *index = 0;
+      break;
+    default:
+      g_assert_not_reached ();
+      break;
+  }
+
+  return GST_FLOW_OK;
+
+activate_failed:
+  {
+    GST_ERROR_OBJECT (space, "Failed to activate bufferpool");
+    return GST_FLOW_ERROR;
+  }
+no_buffer:
+  {
+    GST_ERROR_OBJECT (space, "Could not acquire a buffer from our pool");
+    return ret;
+  }
+invalid_buffer:
+  {
+    GST_ELEMENT_WARNING (space, CORE, NOT_IMPLEMENTED, (NULL),
+        ("invalid video buffer received"));
+    return GST_FLOW_OK;
+  }
+}
+
 static GstFlowReturn
 gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     GstBuffer * outbuf)
 {
   GstVideoFilter *filter = GST_VIDEO_FILTER_CAST (trans);
+  GstVspFilter *space;
   GstMemory *in_gmem[GST_VIDEO_MAX_PLANES], *out_gmem[GST_VIDEO_MAX_PLANES];
   GstVspFilterFrameInfo in_vframe_info, out_vframe_info;
-  GstVideoMeta *in_meta, *out_meta;
   gint in_stride[GST_VIDEO_MAX_PLANES] = { 0 };
   gint out_stride[GST_VIDEO_MAX_PLANES] = { 0 };
   GstFlowReturn ret;
   gint in_n_mem, out_n_mem;
+  guint in_index, out_index;
   gint i;
 
   if (G_UNLIKELY (!filter->negotiated))
     goto unknown_format;
 
-  in_meta = gst_buffer_get_video_meta (inbuf);
-  out_meta = gst_buffer_get_video_meta (outbuf);
+  space = GST_VSP_FILTER_CAST (filter);
 
   in_n_mem = gst_buffer_n_memory (inbuf);
   out_n_mem = gst_buffer_n_memory (outbuf);
 
   for (i = 0; i < in_n_mem; i++)
     in_gmem[i] = gst_buffer_get_memory (inbuf, i);
-
-  if (in_meta) {
-    for (i = 0; i < in_meta->n_planes; i++) {
-      /* Set row stride in bytes */
-      in_stride[i] = GST_VIDEO_FORMAT_INFO_STRIDE (filter->in_info.finfo,
-          in_meta->stride, i);
-    }
-  }
-
   for (i = 0; i < out_n_mem; i++)
     out_gmem[i] = gst_buffer_get_memory (outbuf, i);
 
-  if (out_meta) {
-    for (i = 0; i < out_meta->n_planes; i++) {
-      /* Set row stride in bytes */
-      out_stride[i] = GST_VIDEO_FORMAT_INFO_STRIDE (filter->out_info.finfo,
-          out_meta->stride, i);
-    }
+  memset (&in_vframe_info, 0, sizeof (in_vframe_info));
+  memset (&out_vframe_info, 0, sizeof (out_vframe_info));
+
+  ret = gst_vsp_filter_prepare_video_frame (space, space->prop_in_mode, inbuf,
+      in_gmem, in_n_mem, space->in_pool, &filter->in_info,
+      &in_vframe_info, &in_index);
+  if (ret != GST_FLOW_OK)
+    goto transform_exit;
+
+  ret = gst_vsp_filter_prepare_video_frame (space, space->prop_out_mode, outbuf,
+      out_gmem, out_n_mem, space->out_pool, &filter->out_info,
+      &out_vframe_info, &out_index);
+  if (ret != GST_FLOW_OK)
+    goto transform_exit;
+
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&filter->in_info); i++) {
+    /* When copying inbuf to our pool's buffer, in_vframe_info has the buffer
+       which will be actually queued to the device, so we should get strides
+       from it. */
+    in_stride[i] = get_stride (
+        (in_vframe_info.vframe.frame.buffer
+            && in_vframe_info.vframe.frame.buffer != inbuf) ?
+        in_vframe_info.vframe.frame.buffer : inbuf, &filter->in_info, i);
   }
-
-  if (gst_is_dmabuf_memory (in_gmem[0])) {
-    in_vframe_info.io = V4L2_MEMORY_DMABUF;
-    for (i = 0; i < in_n_mem; i++)
-      in_vframe_info.vframe.dmafd[i] = gst_dmabuf_memory_get_fd (in_gmem[i]);
-  } else {
-    if (!gst_video_frame_map (&in_vframe_info.vframe.frame, &filter->in_info,
-            inbuf, GST_MAP_READ))
-      goto invalid_buffer;
-
-    in_vframe_info.io = V4L2_MEMORY_USERPTR;
-  }
-
-  if (gst_is_dmabuf_memory (out_gmem[0])) {
-    out_vframe_info.io = V4L2_MEMORY_DMABUF;
-    for (i = 0; i < out_n_mem; i++)
-      out_vframe_info.vframe.dmafd[i] = gst_dmabuf_memory_get_fd (out_gmem[i]);
-  } else {
-    if (!gst_video_frame_map (&out_vframe_info.vframe.frame, &filter->out_info,
-            outbuf, GST_MAP_WRITE))
-      goto invalid_buffer;
-
-    out_vframe_info.io = V4L2_MEMORY_USERPTR;
-  }
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&filter->out_info); i++)
+    out_stride[i] = get_stride (outbuf, &filter->out_info, i);
 
   ret =
       gst_vsp_filter_transform_frame_process (filter, &in_vframe_info,
-      &out_vframe_info, in_stride, out_stride);
+      &out_vframe_info, in_stride, out_stride, in_index, out_index);
 
-  if (!gst_is_dmabuf_memory (in_gmem[0]))
+transform_exit:
+  if (in_vframe_info.vframe.frame.buffer)
     gst_video_frame_unmap (&in_vframe_info.vframe.frame);
-  if (!gst_is_dmabuf_memory (out_gmem[0]))
+  if (out_vframe_info.vframe.frame.buffer)
     gst_video_frame_unmap (&out_vframe_info.vframe.frame);
 
   for (i = 0; i < in_n_mem; i++)
@@ -1208,12 +1397,6 @@ unknown_format:
         ("unknown format"));
     return GST_FLOW_NOT_NEGOTIATED;
   }
-invalid_buffer:
-  {
-    GST_ELEMENT_WARNING (filter, CORE, NOT_IMPLEMENTED, (NULL),
-        ("invalid video buffer received"));
-    return GST_FLOW_OK;
-  }
 }
 
 static gboolean
@@ -1225,6 +1408,8 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   GstVideoInfo in_info, out_info;
   GstVspFilter *space;
   GstVspFilterVspInfo *vsp_info;
+  GstBufferPool *in_newpool;
+  GstBufferPool *out_newpool;
 
   space = GST_VSP_FILTER_CAST (filter);
   fclass = GST_VIDEO_FILTER_GET_CLASS (filter);
@@ -1258,6 +1443,25 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
         V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
   }
 
+  in_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lout_fd,
+      V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, incaps, in_info.size);
+  if (!in_newpool)
+    goto pool_setup_failed;
+
+  out_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lcap_fd,
+      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, outcaps, out_info.size);
+  if (!out_newpool) {
+    gst_object_unref (in_newpool);
+    goto pool_setup_failed;
+  }
+
+  gst_object_replace ((GstObject **) & space->in_pool,
+      (GstObject *) in_newpool);
+  gst_object_unref (in_newpool);
+  gst_object_replace ((GstObject **) & space->out_pool,
+      (GstObject *) out_newpool);
+  gst_object_unref (out_newpool);
+
   filter->in_info = in_info;
   filter->out_info = out_info;
   GST_BASE_TRANSFORM_CLASS (fclass)->transform_ip_on_passthrough = FALSE;
@@ -1266,6 +1470,12 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   return TRUE;
 
   /* ERRORS */
+pool_setup_failed:
+  {
+    GST_ERROR_OBJECT (space, "failed to setup pool");
+    filter->negotiated = FALSE;
+    return FALSE;
+  }
 invalid_caps:
   {
     GST_ERROR_OBJECT (space, "invalid caps");
@@ -1278,6 +1488,63 @@ format_mismatch:
     filter->negotiated = FALSE;
     return FALSE;
   }
+}
+
+static gboolean
+gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
+    GstQuery * decide_query, GstQuery * query)
+{
+  GstVspFilter *space;
+  GstVspFilterVspInfo *vsp_info;
+  GstBufferPool *pool;
+  GstStructure *config;
+  guint min, max, size;
+
+  space = GST_VSP_FILTER_CAST (trans);
+  vsp_info = space->vsp_info;
+
+  if (!GST_BASE_TRANSFORM_CLASS (parent_class)->propose_allocation (trans,
+          decide_query, query))
+    return FALSE;
+
+  /* passthrough, we're done */
+  if (decide_query == NULL)
+    return TRUE;
+
+  if (!space->in_pool) {
+    GstCaps *caps;
+    GstVideoInfo vinfo;
+
+    gst_query_parse_allocation (query, &caps, NULL);
+    gst_video_info_init (&vinfo);
+    gst_video_info_from_caps (&vinfo, caps);
+
+    GST_DEBUG_OBJECT (space, "create new pool");
+    space->in_pool = gst_vsp_filter_setup_pool (vsp_info->v4lout_fd,
+        V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, caps, vinfo.size);
+    if (!space->in_pool) {
+      GST_ERROR_OBJECT (space, "failed to setup pool");
+      return FALSE;
+    }
+  }
+
+  pool = gst_object_ref (space->in_pool);
+
+  GST_DEBUG_OBJECT (space, "propose our pool %p", pool);
+  config = gst_buffer_pool_get_config (pool);
+  gst_buffer_pool_config_get_params (config, NULL, &size, &min, &max);
+  gst_structure_free (config);
+
+  if (gst_query_get_n_allocation_pools (query) > 0)
+    gst_query_set_nth_allocation_pool (query, 0, pool, size, min, max);
+  else
+    gst_query_add_allocation_pool (query, pool, size, min, max);
+
+  gst_object_unref (pool);
+
+  gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
+
+  return TRUE;
 }
 
 static void
@@ -1304,6 +1571,18 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
           DEFAULT_PROP_VSP_DEVFILE_OUTPUT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_INPUT_IO_MODE,
+      g_param_spec_enum ("input-io-mode", "Input IO mode",
+          "Input I/O mode",
+          GST_TYPE_VSPFILTER_IO_MODE, DEFAULT_PROP_IO_MODE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_OUTPUT_IO_MODE,
+      g_param_spec_enum ("output-io-mode", "Output IO mode",
+          "Output I/O mode",
+          GST_TYPE_VSPFILTER_IO_MODE, DEFAULT_PROP_IO_MODE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&gst_vsp_filter_src_template));
   gst_element_class_add_pad_template (gstelement_class,
@@ -1327,6 +1606,8 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
       GST_DEBUG_FUNCPTR (gst_vsp_filter_transform_meta);
   gstbasetransform_class->decide_allocation =
       GST_DEBUG_FUNCPTR (gst_vsp_filter_decide_allocation);
+  gstbasetransform_class->propose_allocation =
+      GST_DEBUG_FUNCPTR (gst_vsp_filter_propose_allocation);
   gstbasetransform_class->transform =
       GST_DEBUG_FUNCPTR (gst_vsp_filter_transform);
   gstbasetransform_class->set_caps =
@@ -1378,6 +1659,12 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
       vsp_info->dev_name[CAP] = g_value_dup_string (value);
       vsp_info->prop_dev_name[CAP] = TRUE;
       break;
+    case PROP_INPUT_IO_MODE:
+      space->prop_in_mode = g_value_get_enum (value);
+      break;
+    case PROP_OUTPUT_IO_MODE:
+      space->prop_out_mode = g_value_get_enum (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -1401,6 +1688,12 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
     case PROP_VSP_DEVFILE_OUTPUT:
       g_value_set_string (value, vsp_info->dev_name[CAP]);
       break;
+    case PROP_INPUT_IO_MODE:
+      g_value_set_enum (value, space->prop_in_mode);
+      break;
+    case PROP_OUTPUT_IO_MODE:
+      g_value_set_enum (value, space->prop_out_mode);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -1410,7 +1703,7 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
 static gint
 queue_buffer (GstVspFilter * space, int fd, int index,
     enum v4l2_buf_type buftype, struct v4l2_plane *planes,
-    enum v4l2_memory io[MAX_DEVICES])
+    enum v4l2_memory io[MAX_DEVICES], guint buf_index)
 {
   GstVspFilterVspInfo *vsp_info;
   struct v4l2_buffer buf;
@@ -1421,7 +1714,7 @@ queue_buffer (GstVspFilter * space, int fd, int index,
 
   buf.type = buftype;
   buf.memory = io[index];
-  buf.index = 0;
+  buf.index = buf_index;
   buf.m.planes = planes;
   buf.length = vsp_info->n_planes[index];
 
@@ -1475,7 +1768,8 @@ static GstFlowReturn
 gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
     GstVspFilterFrameInfo * in_vframe_info,
     GstVspFilterFrameInfo * out_vframe_info,
-    gint in_stride[GST_VIDEO_MAX_PLANES], gint out_stride[GST_VIDEO_MAX_PLANES])
+    gint in_stride[GST_VIDEO_MAX_PLANES], gint out_stride[GST_VIDEO_MAX_PLANES],
+    guint in_index, guint out_index)
 {
   GstVspFilter *space;
   GstVspFilterVspInfo *vsp_info;
@@ -1507,8 +1801,9 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   io[CAP] = out_vframe_info->io;
 
   if (!set_vsp_entities (space, in_info->finfo->format, in_info->width,
-          in_info->height, in_stride, out_info->finfo->format, out_info->width,
-          out_info->height, out_stride, io)) {
+          in_info->height, in_stride, in_vframe_info->io != V4L2_MEMORY_MMAP,
+          out_info->finfo->format, out_info->width, out_info->height,
+          out_stride, out_vframe_info->io != V4L2_MEMORY_MMAP, io)) {
     GST_ERROR_OBJECT (space, "set_vsp_entities failed");
     return GST_FLOW_ERROR;
   }
@@ -1522,6 +1817,8 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
         break;
       case V4L2_MEMORY_DMABUF:
         in_planes[i].m.fd = in_vframe_info->vframe.dmafd[i];
+        break;
+      case V4L2_MEMORY_MMAP:
         break;
       default:
         GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
@@ -1550,15 +1847,17 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
         out_planes[i].data_offset = 0;
       }
       break;
+    case V4L2_MEMORY_MMAP:
+      break;
     default:
       GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
       return GST_FLOW_ERROR;
   }
 
   queue_buffer (space, vsp_info->v4lout_fd, OUT,
-      V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, in_planes, io);
+      V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, in_planes, io, in_index);
   queue_buffer (space, vsp_info->v4lcap_fd, CAP,
-      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, out_planes, io);
+      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, out_planes, io, out_index);
 
   if (!vsp_info->is_stream_started) {
     if (!start_capturing (space, vsp_info->v4lout_fd, OUT,

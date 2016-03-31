@@ -61,6 +61,13 @@ G_BEGIN_DECLS
 #define DEFAULT_PROP_VSP_DEVFILE_INPUT "/dev/video0"
 #define DEFAULT_PROP_VSP_DEVFILE_OUTPUT "/dev/video1"
 
+typedef enum {
+  GST_VSPFILTER_IO_AUTO = 0, /* dmabuf or mmap */
+  GST_VSPFILTER_IO_USERPTR,
+} GstVspfilterIOMode;
+
+#define DEFAULT_PROP_IO_MODE GST_VSPFILTER_IO_AUTO
+
 typedef struct _GstVspFilter GstVspFilter;
 typedef struct _GstVspFilterClass GstVspFilterClass;
 
@@ -120,6 +127,10 @@ struct _GstVspFilter {
   GstVideoFilter element;
 
   GstVspFilterVspInfo *vsp_info;
+  GstBufferPool *in_pool;
+  GstBufferPool *out_pool;
+  GstVspfilterIOMode prop_in_mode;
+  GstVspfilterIOMode prop_out_mode;
 };
 
 struct _GstVspFilterClass
