@@ -462,12 +462,6 @@ set_format (GstVspFilter * space, gint fd, guint width, guint height,
     vsp_info->plane_stride[index][i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
   }
 
-  if (!request_buffers (space, fd, index, buftype, N_BUFFERS, io)) {
-    GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
-        vsp_info->dev_name[index]);
-    return FALSE;
-  }
-
   return TRUE;
 }
 
@@ -735,11 +729,24 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
         vsp_info->dev_name[OUT], in_width, in_height);
     return FALSE;
   }
+  if (!request_buffers (space, vsp_info->v4lout_fd, OUT,
+          V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, N_BUFFERS, io)) {
+    GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
+        vsp_info->dev_name[OUT]);
+    return FALSE;
+  }
+
   if (!set_format (space, vsp_info->v4lcap_fd, out_width, out_height,
           out_stride, CAP, V4L2_CAP_VIDEO_CAPTURE_MPLANE,
           V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io)) {
     GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
         vsp_info->dev_name[CAP], out_width, out_height);
+    return FALSE;
+  }
+  if (!request_buffers (space, vsp_info->v4lcap_fd, CAP,
+          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, N_BUFFERS, io)) {
+    GST_ERROR_OBJECT (space, "request_buffers for %s failed.",
+        vsp_info->dev_name[CAP]);
     return FALSE;
   }
 
