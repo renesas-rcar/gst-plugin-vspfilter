@@ -1255,7 +1255,6 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 {
   GstVideoFilter *filter = GST_VIDEO_FILTER_CAST (trans);
   GstMemory *in_gmem[GST_VIDEO_MAX_PLANES], *out_gmem[GST_VIDEO_MAX_PLANES];
-  GstVideoFrame in_frame, out_frame;
   GstVspFilterFrameInfo in_vframe_info, out_vframe_info;
   GstVideoMeta *in_meta, *out_meta;
   gint in_stride[GST_VIDEO_MAX_PLANES] = { 0 };
@@ -1300,11 +1299,11 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     for (i = 0; i < in_n_mem; i++)
       in_vframe_info.vframe.dmafd[i] = gst_dmabuf_memory_get_fd (in_gmem[i]);
   } else {
-    if (!gst_video_frame_map (&in_frame, &filter->in_info, inbuf, GST_MAP_READ))
+    if (!gst_video_frame_map (&in_vframe_info.vframe.frame, &filter->in_info,
+            inbuf, GST_MAP_READ))
       goto invalid_buffer;
 
     in_vframe_info.io = V4L2_MEMORY_USERPTR;
-    in_vframe_info.vframe.frame = &in_frame;
   }
 
   if (gst_is_dmabuf_memory (out_gmem[0])) {
@@ -1312,12 +1311,11 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     for (i = 0; i < out_n_mem; i++)
       out_vframe_info.vframe.dmafd[i] = gst_dmabuf_memory_get_fd (out_gmem[i]);
   } else {
-    if (!gst_video_frame_map (&out_frame, &filter->out_info, outbuf,
-            GST_MAP_WRITE))
+    if (!gst_video_frame_map (&out_vframe_info.vframe.frame, &filter->out_info,
+            outbuf, GST_MAP_WRITE))
       goto invalid_buffer;
 
     out_vframe_info.io = V4L2_MEMORY_USERPTR;
-    out_vframe_info.vframe.frame = &out_frame;
   }
 
   ret =
@@ -1325,9 +1323,9 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
       &out_vframe_info, in_stride, out_stride);
 
   if (!gst_is_dmabuf_memory (in_gmem[0]))
-    gst_video_frame_unmap (&in_frame);
+    gst_video_frame_unmap (&in_vframe_info.vframe.frame);
   if (!gst_is_dmabuf_memory (out_gmem[0]))
-    gst_video_frame_unmap (&out_frame);
+    gst_video_frame_unmap (&out_vframe_info.vframe.frame);
 
   for (i = 0; i < in_n_mem; i++)
     gst_memory_unref (in_gmem[i]);
@@ -1653,7 +1651,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
     switch (in_vframe_info->io) {
       case V4L2_MEMORY_USERPTR:
         in_planes[i].m.userptr =
-            (unsigned long) in_vframe_info->vframe.frame->data[i];
+            (unsigned long) in_vframe_info->vframe.frame.data[i];
         break;
       case V4L2_MEMORY_DMABUF:
         in_planes[i].m.fd = in_vframe_info->vframe.dmafd[i];
@@ -1672,8 +1670,8 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
     case V4L2_MEMORY_USERPTR:
       for (i = 0; i < vsp_info->n_planes[CAP]; i++) {
         out_planes[i].m.userptr =
-            (unsigned long) out_vframe_info->vframe.frame->map[i].data;
-        out_planes[i].length = out_vframe_info->vframe.frame->map[i].maxsize;
+            (unsigned long) out_vframe_info->vframe.frame.map[i].data;
+        out_planes[i].length = out_vframe_info->vframe.frame.map[i].maxsize;
       }
       break;
     case V4L2_MEMORY_DMABUF:
