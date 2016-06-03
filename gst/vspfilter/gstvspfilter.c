@@ -1118,6 +1118,9 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
   for (i = 0; i < n_allocators; i++) {
     gst_query_parse_nth_allocation_param (query, i, &allocator, NULL);
 
+    if (!allocator)
+      continue;
+
     if (g_strcmp0 (allocator->mem_type, GST_ALLOCATOR_DMABUF) == 0) {
       GST_DEBUG_OBJECT (space, "found a dmabuf allocator");
       dmabuf_pool_pos = i;
