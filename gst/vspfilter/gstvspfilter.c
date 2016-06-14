@@ -386,29 +386,67 @@ open_v4lsubdev (gchar * prefix, const gchar * target, gchar * path)
 }
 
 static gint
+get_symlink_target_name (gchar * filename, gchar ** link_target)
+{
+  struct stat lst;
+  gint str_size = -1;
+
+  if (lstat (filename, &lst) == -1)
+    return -1;
+
+  if ((lst.st_mode & S_IFMT) == S_IFLNK) {
+    str_size = lst.st_size + 1;
+    *link_target = g_slice_alloc0 (str_size);
+    if (readlink (filename, *link_target, str_size) == -1) {
+      g_slice_free1 (str_size, *link_target);
+      return -1;
+    }
+  }
+
+  return str_size;
+}
+
+static gint
 open_media_device (GstVspFilter * space)
 {
   GstVspFilterVspInfo *vsp_info;
   struct stat st;
   gchar path[256];
   gchar *dev;
+  gchar *link_target = NULL;
+  gint str_size;
+  gint ret;
   gint i;
 
   vsp_info = space->vsp_info;
 
-  dev = strrchr (vsp_info->dev_name[CAP], '/') + 1;
+  str_size = get_symlink_target_name (vsp_info->dev_name[CAP], &link_target);
+
+  dev =
+      g_path_get_basename ((link_target) ? link_target :
+      vsp_info->dev_name[CAP]);
+
   for (i = 0; i < 256; i++) {
     sprintf (path, "/sys/class/video4linux/%s/device/media%d", dev, i);
     if (0 == stat (path, &st)) {
       sprintf (path, "/dev/media%d", i);
       GST_DEBUG_OBJECT (space, "media device = %s", path);
-      return open (path, O_RDWR);
+      ret = open (path, O_RDWR);
+      goto leave;
     }
   }
 
   GST_ERROR_OBJECT (space, "No media device for %s", vsp_info->ip_name);
 
-  return -1;
+  ret = -1;
+
+leave:
+  if (link_target)
+    g_slice_free1 (str_size, link_target);
+
+  g_free (dev);
+
+  return ret;
 }
 
 static gint
@@ -562,21 +600,36 @@ get_wpf_output_entity_name (GstVspFilter * space, gchar * wpf_output_name,
   gchar *dev;
   gchar path[256];
   gchar *newline;
+  gchar *link_target = NULL;
+  gint str_size;
+  gboolean ret;
 
   vsp_info = space->vsp_info;
 
-  dev = strrchr (vsp_info->dev_name[CAP], '/') + 1;
+  str_size = get_symlink_target_name (vsp_info->dev_name[CAP], &link_target);
+  dev =
+      g_path_get_basename ((link_target) ? link_target :
+      vsp_info->dev_name[CAP]);
   snprintf (path, sizeof (path), "/sys/class/video4linux/%s/name", dev);
   if (fgets_with_openclose (path, wpf_output_name, maxlen) < 0) {
     GST_ERROR_OBJECT (space, "%s couldn't open", path);
-    return FALSE;
+    ret = FALSE;
+    goto leave;
   }
   /* Delete a newline */
   newline = strrchr (wpf_output_name, '\n');
   if (newline)
     *newline = '\0';
 
-  return TRUE;
+  ret = TRUE;
+
+leave:
+  if (link_target)
+    g_slice_free1 (str_size, link_target);
+
+  g_free (dev);
+
+  return ret;
 }
 
 static gboolean
