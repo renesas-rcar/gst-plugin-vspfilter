@@ -18,6 +18,7 @@
  */
 
 #include <string.h>
+#include <sys/ioctl.h>
 
 #include "vspfilterutils.h"
 
