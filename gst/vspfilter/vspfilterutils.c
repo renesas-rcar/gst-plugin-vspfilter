@@ -21,6 +21,9 @@
 
 #include "vspfilterutils.h"
 
+GST_DEBUG_CATEGORY_EXTERN (vspfilter_debug);
+#define GST_CAT_DEFAULT vspfilter_debug
+
 struct extensions_t
 {
   GstVideoFormat format;

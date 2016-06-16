@@ -26,6 +26,9 @@
 #include "vspfilterpool.h"
 #include "vspfilterutils.h"
 
+GST_DEBUG_CATEGORY_EXTERN (vspfilter_debug);
+#define GST_CAT_DEFAULT vspfilter_debug
+
 static G_DEFINE_QUARK (VspfilterBufferQDataQuark, vspfilter_buffer_qdata);
 
 typedef struct _VspfilterBufferPool VspfilterBufferPool;
