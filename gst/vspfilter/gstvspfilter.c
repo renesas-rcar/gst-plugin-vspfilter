@@ -1776,7 +1776,7 @@ queue_buffer (GstVspFilter * space, int fd, int index,
 
   if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)) {
     GST_ERROR_OBJECT (space,
-        "V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE VIDIOC_QBUF failed errno=%d", errno);
+        "VIDIOC_QBUF for %s failed errno=%d", buftype_str (buftype), errno);
     return -1;
   }
 
@@ -1801,7 +1801,8 @@ dequeue_buffer (GstVspFilter * space, int fd, int index,
   buf.length = vsp_info->n_planes[index];
 
   if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
-    GST_ERROR_OBJECT (space, "VIDIOC_DQBUF failed");
+    GST_ERROR_OBJECT (space, "VIDIOC_DQBUF for %s failed",
+        buftype_str (buftype));
     return -1;
   }
 
