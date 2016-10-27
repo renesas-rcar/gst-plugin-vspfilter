@@ -91,6 +91,8 @@ static GstFlowReturn gst_vsp_filter_transform_frame_process (GstVideoFilter *
     gint in_stride[GST_VIDEO_MAX_PLANES],
     gint out_stride[GST_VIDEO_MAX_PLANES], guint in_index, guint out_index);
 
+static gboolean gst_vsp_filter_stop (GstBaseTransform *trans);
+
 #define GST_TYPE_VSPFILTER_IO_MODE (gst_vsp_filter_io_mode_get_type ())
 static GType
 gst_vsp_filter_io_mode_get_type (void)
@@ -1603,6 +1605,16 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   return TRUE;
 }
 
+static gboolean gst_vsp_filter_stop (GstBaseTransform *trans) {
+  GstVspFilter *space;
+  gboolean ret;
+
+  space = GST_VSP_FILTER_CAST (trans);
+  if (space->in_pool)
+    ret = gst_buffer_pool_set_active (space->in_pool, FALSE);
+  return ret;
+}
+
 static void
 gst_vsp_filter_class_init (GstVspFilterClass * klass)
 {
@@ -1668,6 +1680,8 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
       GST_DEBUG_FUNCPTR (gst_vsp_filter_transform);
   gstbasetransform_class->set_caps =
       GST_DEBUG_FUNCPTR (gst_vsp_filter_set_caps);
+  gstbasetransform_class->stop =
+      GST_DEBUG_FUNCPTR (gst_vsp_filter_stop);
 
   gstbasetransform_class->passthrough_on_same_caps = TRUE;
 }
