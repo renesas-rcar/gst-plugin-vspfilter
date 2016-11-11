@@ -487,8 +487,8 @@ activate_link (GstVspFilter * space, struct media_entity_desc *src,
 
   target_link = NULL;
   CLEAR (links);
-  links.pads = malloc (sizeof (struct media_pad_desc) * src->pads);
-  links.links = malloc (sizeof (struct media_link_desc) * src->links);
+  links.pads = g_malloc (sizeof (struct media_pad_desc) * src->pads);
+  links.links = g_malloc (sizeof (struct media_link_desc) * src->links);
 
   links.entity = src->id;
   ret = ioctl (vsp_info->media_fd, MEDIA_IOC_ENUM_LINKS, &links);
@@ -651,11 +651,18 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
   if (vsp_info->already_setup_info)
     return TRUE;
 
-  set_colorspace (in_fmt, &vsp_info->format[OUT], &vsp_info->code[OUT],
+  ret = set_colorspace (in_fmt, &vsp_info->format[OUT], &vsp_info->code[OUT],
       &vsp_info->n_planes[OUT]);
-  set_colorspace (out_fmt, &vsp_info->format[CAP], &vsp_info->code[CAP],
+  if (ret < 0) {
+    GST_ERROR_OBJECT (space, "set_colorspace() failed");
+    return FALSE;
+  }
+  ret = set_colorspace (out_fmt, &vsp_info->format[CAP], &vsp_info->code[CAP],
       &vsp_info->n_planes[CAP]);
-
+  if (ret < 0) {
+    GST_ERROR_OBJECT (space, "set_colorspace() failed");
+    return FALSE;
+  }
   GST_DEBUG_OBJECT (space, "in format=%d  out format=%d", in_fmt, out_fmt);
 
   GST_DEBUG_OBJECT (space, "set_colorspace[OUT]: format=%d code=%d n_planes=%d",
@@ -850,7 +857,7 @@ stop_capturing (GstVspFilter * space, int fd, int index,
 
   vsp_info = space->vsp_info;
 
-  GST_DEBUG_OBJECT (space, "stop streaming... ");;
+  GST_DEBUG_OBJECT (space, "stop streaming... ");
 
   if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &buftype)) {
     GST_ERROR_OBJECT (space, "VIDIOC_STREAMOFF for %s failed",
@@ -1096,11 +1103,9 @@ static GstStateChangeReturn
 gst_vsp_filter_change_state (GstElement * element, GstStateChange transition)
 {
   GstVspFilter *space;
-  GstVspFilterVspInfo *vsp_info;
   GstStateChangeReturn ret;
 
   space = GST_VSP_FILTER_CAST (element);
-  vsp_info = space->vsp_info;
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
@@ -1264,7 +1269,6 @@ static void
 gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
     GstVideoFrame * src_frame, GstVideoInfo * vinfo)
 {
-  GstVideoMeta meta;
   gint width, height;
   guint8 *sp, *dp;
   gint ss, ds;
@@ -1706,7 +1710,7 @@ gst_vsp_filter_init (GstVspFilter * space)
   space->vsp_info = vsp_info;
 }
 
-void
+static void
 gst_vsp_filter_set_property (GObject * object, guint property_id,
     const GValue * value, GParamSpec * pspec)
 {
@@ -1741,7 +1745,7 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
   }
 }
 
-void
+static void
 gst_vsp_filter_get_property (GObject * object, guint property_id,
     GValue * value, GParamSpec * pspec)
 {

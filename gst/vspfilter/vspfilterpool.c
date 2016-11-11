@@ -98,17 +98,12 @@ static gboolean
 vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
-  struct v4l2_format fmt;
-  struct v4l2_requestbuffers req;
-  struct v4l2_buffer buf;
-  struct v4l2_plane planes[VIDEO_MAX_PLANES];
   GstVideoInfo *vinfo;
   guint max_buffers;
   GstCaps *caps = NULL;
   guint pix_fmt;
   guint n_reqbufs;
   gint ret;
-  gint i, j;
 
   if (!gst_buffer_pool_config_get_params (config, &caps, NULL, NULL,
           &max_buffers)) {
@@ -203,7 +198,6 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
   VspfilterBuffer *vf_buffer;
   struct v4l2_exportbuffer expbuf;
   guint index = VSPFILTER_INDEX_INVALID;
-  void *data;
   gsize size;
   gsize total = 0;
   gsize offset[GST_VIDEO_MAX_PLANES];
@@ -286,7 +280,7 @@ vspfilter_buffer_pool_free_buffer (GstBufferPool * bpool, GstBuffer * buffer)
   if (vf_buffer)
     self->exported[vf_buffer->index] = FALSE;
 
-  return GST_BUFFER_POOL_CLASS (parent_class)->free_buffer (bpool, buffer);
+  GST_BUFFER_POOL_CLASS (parent_class)->free_buffer (bpool, buffer);
 }
 
 static void
