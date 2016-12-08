@@ -64,7 +64,12 @@ enum
   PROP_OUTPUT_IO_MODE,
 };
 
-#define CSP_VIDEO_CAPS GST_VIDEO_CAPS_MAKE (GST_VIDEO_FORMATS_ALL)
+#define CSP_VIDEO_CAPS \
+    "video/x-raw, " \
+        "format = (string) {RGB16, RGB, BGR, ARGB, xRGB, BGRA, BGRx, I420, NV12, NV21, NV16, UYVY, YUY2}," \
+        "width = [ 1, 8190 ], " \
+        "height = [ 1, 8190 ], " \
+        "framerate = " GST_VIDEO_FPS_RANGE
 
 static GstStaticPadTemplate gst_vsp_filter_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
