@@ -66,7 +66,7 @@ enum
 
 #define CSP_VIDEO_CAPS \
     "video/x-raw, " \
-        "format = (string) {RGB16, RGB, BGR, ARGB, xRGB, BGRA, BGRx, I420, NV12, UYVY}," \
+        "format = (string) {RGB16, RGB, BGR, ARGB, xRGB, BGRA, BGRx, I420, NV12, NV16, UYVY}," \
         "width = [ 1, 8192 ], " \
         "height = [ 1, 8192 ], " \
         "framerate = " GST_VIDEO_FPS_RANGE
