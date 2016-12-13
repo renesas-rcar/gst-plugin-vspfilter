@@ -1611,7 +1611,7 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
 
 static gboolean gst_vsp_filter_stop (GstBaseTransform *trans) {
   GstVspFilter *space;
-  gboolean ret;
+  gboolean ret = TRUE;
 
   space = GST_VSP_FILTER_CAST (trans);
   if (space->in_pool)
