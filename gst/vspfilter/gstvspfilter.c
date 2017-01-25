@@ -1154,15 +1154,19 @@ gst_vsp_filter_change_state (GstElement * element, GstStateChange transition)
 
 static GstBufferPool *
 gst_vsp_filter_setup_pool (gint fd, enum v4l2_buf_type buftype, GstCaps * caps,
-    gsize size)
+    gsize size, guint num_buf)
 {
   GstBufferPool *pool;
   GstStructure *structure;
+  guint buf_cnt = MAX(3, num_buf);
 
   pool = vspfilter_buffer_pool_new (fd, buftype);
 
   structure = gst_buffer_pool_get_config (pool);
-  gst_buffer_pool_config_set_params (structure, caps, size, 3, 3);
+  /*We don't support dynamically allocating buffers, so set the max buffer
+    count to be the same as the min buffer count */
+  gst_buffer_pool_config_set_params (structure, caps, size,
+      buf_cnt, buf_cnt);
   if (!gst_buffer_pool_set_config (pool, structure)) {
     gst_object_unref (pool);
     return NULL;
@@ -1181,11 +1185,13 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
   GstBufferPool *pool = NULL;
   GstAllocator *allocator;
   guint n_allocators;
+  guint n_pools;
   guint dmabuf_pool_pos = 0;
   gboolean have_dmabuf = FALSE;
   GstStructure *config;
-  guint min, max, size;
-  gboolean update_pool;
+  guint min = 0;
+  guint max = 0;
+  guint size = 0;
   guint i;
 
   space = GST_VSP_FILTER_CAST (trans);
@@ -1209,33 +1215,6 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     gst_object_unref (allocator);
   }
 
-  if (space->prop_out_mode == GST_VSPFILTER_IO_AUTO && !have_dmabuf) {
-    if (!space->out_pool) {
-      GstCaps *caps;
-      GstVideoInfo vinfo;
-
-      gst_query_parse_allocation (query, &caps, NULL);
-      gst_video_info_init (&vinfo);
-      gst_video_info_from_caps (&vinfo, caps);
-
-      GST_DEBUG_OBJECT (space, "create new pool");
-      space->out_pool = gst_vsp_filter_setup_pool (vsp_info->v4lcap_fd,
-          V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, caps, vinfo.size);
-      if (!space->out_pool) {
-        GST_ERROR_OBJECT (space, "failed to setup pool");
-        return FALSE;
-      }
-    }
-
-    pool = gst_object_ref (space->out_pool);
-    GST_DEBUG_OBJECT (space, "use our pool %p", pool);
-    config = gst_buffer_pool_get_config (pool);
-    gst_buffer_pool_config_get_params (config, NULL, &size, &min, &max);
-    gst_structure_free (config);
-    update_pool = (gst_query_get_n_allocation_pools (query) > 0) ? TRUE : FALSE;
-    goto set_pool;
-  }
-
   /* Delete buffer pools registered before the pool of dmabuf in
    * the buffer pool list so that the dmabuf allocator will be selected
    * by the parent class.
@@ -1243,10 +1222,33 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
   for (i = 0; i < dmabuf_pool_pos; i++)
     gst_query_remove_nth_allocation_param (query, i);
 
-  if (gst_query_get_n_allocation_pools (query) > 0) {
+  n_pools = gst_query_get_n_allocation_pools (query);
+  if (n_pools > 0)
     gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min, &max);
 
-    update_pool = TRUE;
+  if (space->prop_out_mode == GST_VSPFILTER_IO_AUTO && !have_dmabuf) {
+    GstCaps *caps;
+    GstVideoInfo vinfo;
+
+    gst_query_parse_allocation (query, &caps, NULL);
+    gst_video_info_init (&vinfo);
+    gst_video_info_from_caps (&vinfo, caps);
+
+    GST_DEBUG_OBJECT (space, "create new pool, min buffers=%d, max buffers=%d",
+        min, max);
+    size = MAX(vinfo.size, size);
+    space->out_pool = gst_vsp_filter_setup_pool (vsp_info->v4lcap_fd,
+        V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, caps, size, min);
+    if (!space->out_pool) {
+      GST_ERROR_OBJECT (space, "failed to setup pool");
+      return FALSE;
+    }
+
+    gst_object_replace ((GstObject **) &pool, (GstObject *) space->out_pool);
+    GST_DEBUG_OBJECT (space, "use our pool %p", pool);
+    config = gst_buffer_pool_get_config (pool);
+    gst_buffer_pool_config_get_params (config, NULL, &size, &min, &max);
+    gst_structure_free (config);
   }
 
   /* We need a bufferpool for userptr. */
@@ -1255,12 +1257,14 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     return FALSE;
   }
 
-  config = gst_buffer_pool_get_config (pool);
-  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-  gst_buffer_pool_set_config (pool, config);
+  if (pool != space->out_pool) {
+    config = gst_buffer_pool_get_config (pool);
+    gst_buffer_pool_config_add_option (config,
+        GST_BUFFER_POOL_OPTION_VIDEO_META);
+    gst_buffer_pool_set_config (pool, config);
+  }
 
-set_pool:
-  if (update_pool)
+  if (n_pools > 0)
     gst_query_set_nth_allocation_pool (query, 0, pool, size, min, max);
   else
     gst_query_add_allocation_pool (query, pool, size, min, max);
@@ -1489,6 +1493,7 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   GstVspFilterVspInfo *vsp_info;
   GstBufferPool *in_newpool;
   GstBufferPool *out_newpool;
+  guint buf_min = 0, buf_max = 0;
 
   space = GST_VSP_FILTER_CAST (filter);
   fclass = GST_VIDEO_FILTER_GET_CLASS (filter);
@@ -1523,23 +1528,13 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   }
 
   in_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lout_fd,
-      V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, incaps, in_info.size);
+      V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, incaps, in_info.size, 0);
   if (!in_newpool)
     goto pool_setup_failed;
-
-  out_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lcap_fd,
-      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, outcaps, out_info.size);
-  if (!out_newpool) {
-    gst_object_unref (in_newpool);
-    goto pool_setup_failed;
-  }
 
   gst_object_replace ((GstObject **) & space->in_pool,
       (GstObject *) in_newpool);
   gst_object_unref (in_newpool);
-  gst_object_replace ((GstObject **) & space->out_pool,
-      (GstObject *) out_newpool);
-  gst_object_unref (out_newpool);
 
   filter->in_info = in_info;
   filter->out_info = out_info;
@@ -1600,7 +1595,7 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
 
     GST_DEBUG_OBJECT (space, "create new pool");
     space->in_pool = gst_vsp_filter_setup_pool (vsp_info->v4lout_fd,
-        V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, caps, vinfo.size);
+        V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, caps, vinfo.size, 0);
     if (!space->in_pool) {
       GST_ERROR_OBJECT (space, "failed to setup pool");
       return FALSE;
