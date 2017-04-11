@@ -1156,7 +1156,7 @@ gst_vsp_filter_setup_pool (gint fd, enum v4l2_buf_type buftype, GstCaps * caps,
   gst_buffer_pool_config_set_params (structure, caps, size, 3, 3);
   if (!gst_buffer_pool_set_config (pool, structure)) {
     gst_object_unref (pool);
-    return FALSE;
+    return NULL;
   }
 
   return pool;
