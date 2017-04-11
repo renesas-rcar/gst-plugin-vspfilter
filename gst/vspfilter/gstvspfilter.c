@@ -494,7 +494,7 @@ activate_link (GstVspFilter * space, struct media_entity_desc *src,
   ret = ioctl (vsp_info->media_fd, MEDIA_IOC_ENUM_LINKS, &links);
   if (ret) {
     GST_ERROR_OBJECT (space, "MEDIA_IOC_ENUM_LINKS failed");
-    return ret;
+    goto leave;
   }
 
   for (i = 0; i < src->links; i++) {
@@ -503,16 +503,24 @@ activate_link (GstVspFilter * space, struct media_entity_desc *src,
     } else if (links.links[i].flags & MEDIA_LNK_FL_ENABLED) {
       GST_WARNING_OBJECT (space, "An active link to %02x found.",
           links.links[i].sink.entity);
-      return -1;
+      ret = -1;
+      goto leave;
     }
   }
 
-  if (!target_link)
-    return -1;
+  if (!target_link) {
+    ret = -1;
+    goto leave;
+  }
 
   target_link->flags |= MEDIA_LNK_FL_ENABLED;
+  ret = ioctl (vsp_info->media_fd, MEDIA_IOC_SETUP_LINK, target_link);
 
-  return ioctl (vsp_info->media_fd, MEDIA_IOC_SETUP_LINK, target_link);
+leave:
+  g_free (links.pads);
+  g_free (links.links);
+
+  return ret;
 }
 
 static gint
