@@ -279,6 +279,7 @@ vspfilter_buffer_pool_free_buffer (GstBufferPool * bpool, GstBuffer * buffer)
       vspfilter_buffer_qdata_quark ());
   if (vf_buffer)
     self->exported[vf_buffer->index] = FALSE;
+  free_vf_buffer (vf_buffer);
 
   GST_BUFFER_POOL_CLASS (parent_class)->free_buffer (bpool, buffer);
 }
