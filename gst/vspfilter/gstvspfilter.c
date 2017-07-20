@@ -916,10 +916,9 @@ init_device (GstVspFilter * space, gint fd, gint index, guint captype,
   }
 
   /* look for a counterpart */
-  p = g_strdup ((const char *) cap.card);
-  p = strtok (p, " ");
+  p = strtok (cap.card, " ");
   if (vsp_info->ip_name == NULL) {
-    vsp_info->ip_name = p;
+    vsp_info->ip_name = g_strdup(p);
     GST_DEBUG_OBJECT (space, "ip_name = %s", vsp_info->ip_name);
   } else if (strcmp (vsp_info->ip_name, p) != 0) {
     GST_ERROR_OBJECT (space, "ip name mismatch vsp_info->ip_name=%s p=%s",
@@ -927,7 +926,7 @@ init_device (GstVspFilter * space, gint fd, gint index, guint captype,
     return FALSE;
   }
 
-  vsp_info->entity_name[index] = strtok (NULL, " ");
+  vsp_info->entity_name[index] = g_strdup(strtok (NULL, " "));
   if (vsp_info->entity_name[index] == NULL) {
     GST_ERROR_OBJECT (space, "entity name not found. in %s", cap.card);
     return FALSE;
@@ -1104,6 +1103,9 @@ gst_vsp_filter_vsp_device_deinit (GstVspFilter * space)
 
   g_free (vsp_info->ip_name);
   vsp_info->ip_name = NULL;
+
+  g_free (vsp_info->entity_name[OUT]);
+  g_free (vsp_info->entity_name[CAP]);
 
   vsp_info->already_device_initialized[OUT] =
       vsp_info->already_device_initialized[CAP] = FALSE;
