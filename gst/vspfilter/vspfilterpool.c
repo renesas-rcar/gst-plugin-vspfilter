@@ -291,6 +291,7 @@ vspfilter_buffer_pool_finalize (GObject * object)
 
   g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
   gst_object_unref (self->allocator);
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static void
