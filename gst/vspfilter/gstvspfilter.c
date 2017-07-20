@@ -489,8 +489,8 @@ activate_link (GstVspFilter * space, struct media_entity_desc *src,
 
   target_link = NULL;
   CLEAR (links);
-  links.pads = g_malloc (sizeof (struct media_pad_desc) * src->pads);
-  links.links = g_malloc (sizeof (struct media_link_desc) * src->links);
+  links.pads = g_malloc0 (sizeof (struct media_pad_desc) * src->pads);
+  links.links = g_malloc0 (sizeof (struct media_link_desc) * src->links);
 
   links.entity = src->id;
   ret = ioctl (vsp_info->media_fd, MEDIA_IOC_ENUM_LINKS, &links);
@@ -536,8 +536,8 @@ deactivate_link (GstVspFilter * space, struct media_entity_desc *src)
   vsp_info = space->vsp_info;
 
   CLEAR (links);
-  links.pads = g_malloc (sizeof (struct media_pad_desc) * src->pads);
-  links.links = g_malloc (sizeof (struct media_link_desc) * src->links);
+  links.pads = g_malloc0 (sizeof (struct media_pad_desc) * src->pads);
+  links.links = g_malloc0 (sizeof (struct media_link_desc) * src->links);
 
   links.entity = src->id;
   ret = ioctl (vsp_info->media_fd, MEDIA_IOC_ENUM_LINKS, &links);
