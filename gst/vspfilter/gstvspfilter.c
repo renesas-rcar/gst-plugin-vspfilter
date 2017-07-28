@@ -62,6 +62,8 @@ enum
   PROP_VSP_DEVFILE_OUTPUT,
   PROP_INPUT_IO_MODE,
   PROP_OUTPUT_IO_MODE,
+  PROP_VFLIP,
+  PROP_HFLIP,
 };
 
 #define CSP_VIDEO_CAPS \
@@ -155,6 +157,7 @@ gst_vsp_filter_is_caps_format_supported_for_vsp (GstVspFilter * space,
   GstVideoFormat in_fmt, out_fmt;
   guint in_v4l2pix, out_v4l2pix;
   struct v4l2_format v4l2fmt;
+  struct v4l2_control ctrl;
   gint ret;
 
   vsp_info = space->vsp_info;
@@ -228,6 +231,46 @@ gst_vsp_filter_is_caps_format_supported_for_vsp (GstVspFilter * space,
         "VIDIOC_TRY_FMT failed. (%dx%d pixelformat=%d)", out_w, out_h,
         out_v4l2pix);
     return FALSE;
+  }
+
+  if (space->vflip) {
+	ctrl.id = V4L2_CID_VFLIP;
+	ctrl.value = 1;
+	ret = xioctl(vsp_info->v4lsub_fd[CAP], VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+	  GST_ERROR_OBJECT (space,
+	      "VIDIOC_S_CTRL failed. could not set vflip");
+	  return FALSE;
+	  }
+  } else { /* reset the flip value back to original, if not set*/
+	ctrl.id = V4L2_CID_VFLIP;
+	ctrl.value = 0;
+	ret = xioctl(vsp_info->v4lsub_fd[CAP], VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+	  GST_ERROR_OBJECT (space,
+	      "VIDIOC_S_CTRL failed. could not re-set vflip");
+	  return FALSE;
+	  }
+  }
+
+  if (space->hflip) {
+	ctrl.id = V4L2_CID_HFLIP;
+	ctrl.value = 1;
+	ret = xioctl(vsp_info->v4lsub_fd[CAP], VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+	  GST_ERROR_OBJECT (space,
+	      "VIDIOC_S_CTRL failed. could not set hflip");
+	  return FALSE;
+	  }
+  } else {
+	ctrl.id = V4L2_CID_HFLIP;
+	ctrl.value = 0;
+	ret = xioctl(vsp_info->v4lsub_fd[CAP], VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+	  GST_ERROR_OBJECT (space,
+	      "VIDIOC_S_CTRL failed. could not re-set hflip");
+	  return FALSE;
+	  }
   }
 
   return TRUE;
@@ -599,6 +642,7 @@ init_entity_pad (GstVspFilter * space, gint fd, gint index, guint pad,
   sfmt.format.code = code;
   sfmt.format.field = V4L2_FIELD_NONE;
   sfmt.format.colorspace = V4L2_COLORSPACE_SRGB;
+
 
   if (-1 == xioctl (fd, VIDIOC_SUBDEV_S_FMT, &sfmt)) {
     GST_ERROR_OBJECT (space, "VIDIOC_SUBDEV_S_FMT for %s failed.",
@@ -1667,6 +1711,16 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
           GST_TYPE_VSPFILTER_IO_MODE, DEFAULT_PROP_IO_MODE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_VFLIP,
+         g_param_spec_boolean("vflip", "vflip",
+             "Perform vertical flip (around X axis)",
+             DEFAULT_VFLIP, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_HFLIP,
+         g_param_spec_boolean("hflip", "hflip",
+             "Perform horizontal flip (around Y axis)",
+             DEFAULT_HFLIP, G_PARAM_READWRITE));
+
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&gst_vsp_filter_src_template));
   gst_element_class_add_pad_template (gstelement_class,
@@ -1751,6 +1805,12 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
     case PROP_OUTPUT_IO_MODE:
       space->prop_out_mode = g_value_get_enum (value);
       break;
+    case PROP_VFLIP:
+      space->vflip = g_value_get_boolean(value);
+      break;
+    case PROP_HFLIP:
+      space->hflip = g_value_get_boolean(value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -1779,6 +1839,12 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
       break;
     case PROP_OUTPUT_IO_MODE:
       g_value_set_enum (value, space->prop_out_mode);
+      break;
+    case PROP_VFLIP:
+      g_value_set_boolean(value, space->vflip);
+      break;
+    case PROP_HFLIP:
+      g_value_set_boolean(value, space->hflip);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
