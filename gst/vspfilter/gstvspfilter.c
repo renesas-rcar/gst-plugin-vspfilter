@@ -1330,7 +1330,7 @@ gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
     case GST_VSPFILTER_IO_AUTO:
       _index = vspfilter_buffer_pool_get_buffer_index (buffer);
 
-      if (_index != VSPFILTER_INDEX_INVALID) {
+      if (_index != VSPFILTER_INDEX_INVALID && buffer->pool == pool) {
         /* This buffer is from our MMAP buffer pool. */
         vframe_info->io = V4L2_MEMORY_MMAP;
         *index = _index;
