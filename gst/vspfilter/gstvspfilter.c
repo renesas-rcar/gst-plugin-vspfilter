@@ -1,9 +1,9 @@
 /* GStreamer
  * Copyright (C) <1999> Erik Walthinsen <omega@cse.ogi.edu>
  * This file:
- * Copyright (C) 2003 Ronald Bultje <rbultje@ronald.bitfreak.net>
- * Copyright (C) 2010 David Schleef <ds@schleef.org>
  * Copyright (C) 2014-2017 Renesas Electronics Corporation
+ * Based on videoconvert by Ronald Bultje <rbultje@ronald.bitfreak.net>
+ *                          David Schleef <ds@schleef.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
