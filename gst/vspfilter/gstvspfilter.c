@@ -3,7 +3,7 @@
  * This file:
  * Copyright (C) 2003 Ronald Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2010 David Schleef <ds@schleef.org>
- * Copyright (C) 2017 Renesas Electronics Corporation
+ * Copyright (C) 2014-2017 Renesas Electronics Corporation
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
