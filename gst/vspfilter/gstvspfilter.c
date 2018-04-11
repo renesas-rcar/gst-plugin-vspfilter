@@ -1525,6 +1525,7 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
         V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
     stop_capturing (space, vsp_info->v4lcap_fd, CAP,
         V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+    vsp_info->is_stream_started = FALSE;
   }
 
   in_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lout_fd,
