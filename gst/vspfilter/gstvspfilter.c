@@ -1226,7 +1226,8 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
   if (n_pools > 0)
     gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min, &max);
 
-  if (space->prop_out_mode == GST_VSPFILTER_IO_AUTO && !have_dmabuf) {
+  if (space->prop_out_mode == GST_VSPFILTER_IO_AUTO && !have_dmabuf
+        && !space->out_pool) {
     GstCaps *caps;
     GstVideoInfo vinfo;
 
@@ -1243,7 +1244,9 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
       GST_ERROR_OBJECT (space, "failed to setup pool");
       return FALSE;
     }
+  }
 
+  if (space->out_pool) {
     gst_object_replace ((GstObject **) &pool, (GstObject *) space->out_pool);
     GST_DEBUG_OBJECT (space, "use our pool %p", pool);
     config = gst_buffer_pool_get_config (pool);
