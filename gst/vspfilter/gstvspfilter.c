@@ -1531,6 +1531,18 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     vsp_info->is_stream_started = FALSE;
   }
 
+  if (space->in_pool) {
+    guint n_reqbufs = 0;
+
+    gst_buffer_pool_set_active (space->in_pool, FALSE);
+    if (!request_buffers (vsp_info->v4lout_fd,
+                V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, &n_reqbufs,
+                V4L2_MEMORY_MMAP)) {
+          GST_ERROR_OBJECT (space, "reqbuf for output failed (count = 0)");
+       return FALSE;
+    }
+  }
+
   in_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lout_fd,
       V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, incaps, in_info.size, 0);
   if (!in_newpool)
