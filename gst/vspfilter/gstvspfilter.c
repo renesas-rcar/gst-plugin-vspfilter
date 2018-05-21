@@ -276,6 +276,17 @@ gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
   /* fixate remaining fields */
   result = gst_caps_fixate (result);
 
+  if (direction == GST_PAD_SINK) {
+    GstVideoInfo in_info;
+
+    gst_video_info_from_caps (&in_info, caps);
+    if (!w)
+      gst_caps_set_simple(result, "width",
+        G_TYPE_INT, round_down_width (in_info.finfo, from_w), NULL);
+    if (!h)
+      gst_caps_set_simple(result, "height",
+        G_TYPE_INT, round_down_height (in_info.finfo, from_h), NULL);
+  }
   if (!gst_vsp_filter_is_caps_format_supported_for_vsp (space, direction,
           caps, result)) {
     GST_ERROR_OBJECT (trans, "Unsupported caps format for vsp");
@@ -585,6 +596,33 @@ leave:
 }
 
 static gboolean
+set_crop (GstVspFilter * space, gint fd, guint * width, guint * height)
+{
+  struct v4l2_subdev_selection sel = {
+    .pad = 0,
+    .which = V4L2_SUBDEV_FORMAT_ACTIVE,
+    .target = V4L2_SEL_TGT_CROP,
+    .flags = V4L2_SEL_FLAG_LE,
+  };
+
+  sel.r.top = 0;
+  sel.r.left = 0;
+  sel.r.width = *width;
+  sel.r.height = *height;
+
+  if (-1 == xioctl (fd, VIDIOC_SUBDEV_S_SELECTION, &sel)) {
+    GST_ERROR_OBJECT (space, "V4L2_SEL_TGT_CROP failed.");
+    return FALSE;
+  }
+
+  /* crop size may have changed */
+  *width = sel.r.width;
+  *height = sel.r.height;
+
+  return TRUE;
+}
+
+static gboolean
 init_entity_pad (GstVspFilter * space, gint fd, gint index, guint pad,
     guint width, guint height, guint code)
 {
@@ -657,6 +695,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
     gboolean need_out_setfmt, enum v4l2_memory io[MAX_DEVICES])
 {
   GstVspFilterVspInfo *vsp_info;
+  const GstVideoFormatInfo *in_finfo;
   gint ret;
   gchar tmp[256];
   guint n_bufs;
@@ -687,8 +726,16 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
 
   n_bufs = N_BUFFERS;
 
+  in_finfo = gst_video_format_get_info (in_fmt);
+
+  /*in case odd size of yuv buffer, separate buffer and image size*/
+  guint in_buf_width = round_up_width (in_finfo, in_width);
+  guint in_buf_height = round_up_height (in_finfo, in_height);
+  guint in_img_width = round_down_width (in_finfo, in_width);
+  guint in_img_height = round_down_height (in_finfo, in_height);
+
   if (need_in_setfmt) {
-    if (!set_format (vsp_info->v4lout_fd, in_width, in_height,
+    if (!set_format (vsp_info->v4lout_fd, in_buf_width, in_buf_height,
             vsp_info->format[OUT],
             in_stride, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT])) {
       GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
@@ -726,14 +773,21 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
       in_width, in_height, out_width, out_height);
 
   /* sink pad in RPF */
-  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 0, in_width,
-          in_height, vsp_info->code[OUT])) {
+  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 0, in_buf_width,
+          in_buf_height, vsp_info->code[OUT])) {
     GST_ERROR_OBJECT (space, "init_entity_pad failed");
     return FALSE;
   }
+  if (in_buf_width != in_img_width || in_buf_height != in_img_height) {
+    if (!set_crop (space, vsp_info->v4lsub_fd[OUT],
+          &in_img_width, &in_img_height)) {
+      GST_ERROR_OBJECT (space, "set_crop failed");
+      return FALSE;
+    }
+  }
   /* source pad in RPF */
-  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 1, in_width,
-          in_height, vsp_info->code[CAP])) {
+  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 1, in_img_width,
+          in_img_height, vsp_info->code[CAP])) {
     GST_ERROR_OBJECT (space, "init_entity_pad failed");
     return FALSE;
   }
@@ -763,7 +817,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
   deactivate_link (space, &vsp_info->entity[OUT]);
 
   /* link up entities for VSP1 V4L2 */
-  if ((in_width != out_width) || (in_height != out_height)) {
+  if ((in_img_width != out_width) || (in_img_height != out_height)) {
     gchar path[256];
     const gchar *resz_entity_name = "uds.0";
 
@@ -806,8 +860,8 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
     GST_DEBUG_OBJECT (space, "A link from %s to %s enabled.",
         resz_entity_name, vsp_info->entity_name[CAP]);
 
-    if (!init_entity_pad (space, vsp_info->resz_subdev_fd, RESZ, 0, in_width,
-            in_height, vsp_info->code[CAP])) {
+    if (!init_entity_pad (space, vsp_info->resz_subdev_fd, RESZ, 0, in_img_width,
+            in_img_height, vsp_info->code[CAP])) {
       GST_ERROR_OBJECT (space, "init_entity_pad failed");
       return FALSE;
     }
@@ -1897,6 +1951,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   }
 
   /* set up planes for queuing input buffers */
+  int in_height = round_up_height (in_info->finfo, in_info->height);
   for (i = 0; i < vsp_info->n_planes[OUT]; i++) {
     switch (in_vframe_info->io) {
       case V4L2_MEMORY_USERPTR:
@@ -1912,8 +1967,9 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
         GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
         return GST_FLOW_ERROR;
     }
-    in_planes[i].length = in_stride[i] *
-        GST_VIDEO_INFO_COMP_HEIGHT (in_info, i);
+    int plane_height = GST_VIDEO_SUB_SCALE (
+      GST_VIDEO_FORMAT_INFO_H_SUB (in_info->finfo, i), in_height);
+    in_planes[i].length = in_stride[i] * plane_height;
     in_planes[i].bytesused = in_planes[i].length;
   }
 

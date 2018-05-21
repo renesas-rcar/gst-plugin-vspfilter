@@ -36,6 +36,10 @@ buftype_str (enum v4l2_buf_type buftype)
   return "unknown";
 }
 
+guint round_down_width (const GstVideoFormatInfo *finfo, guint width);
+guint round_down_height (const GstVideoFormatInfo *finfo, guint height);
+guint round_up_width (const GstVideoFormatInfo *finfo, guint width);
+guint round_up_height (const GstVideoFormatInfo *finfo, guint height);
 gint set_colorspace (GstVideoFormat vid_fmt, guint * fourcc,
     enum v4l2_mbus_pixelcode * code, guint * n_planes);
 gint xioctl (gint fd, gint request, void * arg);

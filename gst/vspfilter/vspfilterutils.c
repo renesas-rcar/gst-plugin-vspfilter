@@ -25,6 +25,14 @@
 GST_DEBUG_CATEGORY_EXTERN (vspfilter_debug);
 #define GST_CAT_DEFAULT vspfilter_debug
 
+#define FORMAT_NEEDS_WIDTH_ALIGN(finfo) \
+          GST_VIDEO_FORMAT_INFO_W_SUB (finfo,\
+          GST_VIDEO_FORMAT_INFO_N_COMPONENTS(finfo) - 1)
+
+#define FORMAT_NEEDS_HEIGHT_ALIGN(finfo) \
+          GST_VIDEO_FORMAT_INFO_H_SUB (finfo,\
+          GST_VIDEO_FORMAT_INFO_N_COMPONENTS(finfo) - 1)
+
 struct extensions_t
 {
   GstVideoFormat format;
@@ -48,6 +56,42 @@ static const struct extensions_t exts[] = {
   {GST_VIDEO_FORMAT_UYVY, V4L2_PIX_FMT_UYVY, V4L2_MBUS_FMT_AYUV8_1X32, 1},
   {GST_VIDEO_FORMAT_YUY2, V4L2_PIX_FMT_YUYV, V4L2_MBUS_FMT_AYUV8_1X32, 1},
 };
+
+guint
+round_down_width (const GstVideoFormatInfo *finfo, guint width)
+{
+  if (FORMAT_NEEDS_WIDTH_ALIGN (finfo))
+    return GST_ROUND_DOWN_2 (width);
+  else
+    return width;
+}
+
+guint
+round_down_height (const GstVideoFormatInfo *finfo, guint height)
+{
+  if (FORMAT_NEEDS_HEIGHT_ALIGN (finfo))
+    return GST_ROUND_DOWN_2 (height);
+  else
+    return height;
+}
+
+guint
+round_up_width (const GstVideoFormatInfo *finfo, guint width)
+{
+  if (FORMAT_NEEDS_WIDTH_ALIGN (finfo))
+    return GST_ROUND_UP_2 (width);
+  else
+    return width;
+}
+
+guint
+round_up_height (const GstVideoFormatInfo *finfo, guint height)
+{
+  if (FORMAT_NEEDS_HEIGHT_ALIGN (finfo))
+    return GST_ROUND_UP_2 (height);
+  else
+    return height;
+}
 
 gint
 set_colorspace (GstVideoFormat vid_fmt, guint * fourcc,

@@ -104,6 +104,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   guint pix_fmt;
   guint n_reqbufs;
   gint ret;
+  guint width, height;
 
   if (!gst_buffer_pool_config_get_params (config, &caps, NULL, NULL,
           &max_buffers)) {
@@ -149,7 +150,15 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
 
   memset (self->stride, 0, sizeof (self->stride));
 
-  if (!set_format (self->fd, vinfo->width, vinfo->height, pix_fmt,
+  if (self->buftype == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+    width = round_up_width (vinfo->finfo, vinfo->width);
+    height = round_up_height (vinfo->finfo, vinfo->height);
+  } else {
+    width = vinfo->width;
+    height = vinfo->height;
+  }
+
+  if (!set_format (self->fd, width, height, pix_fmt,
           self->stride, self->buftype, V4L2_MEMORY_MMAP)) {
     GST_ERROR_OBJECT (self, "set_format for %s failed (%dx%d)",
         buftype_str (self->buftype), vinfo->width, vinfo->height);
