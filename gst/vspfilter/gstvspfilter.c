@@ -277,15 +277,20 @@ gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
   result = gst_caps_fixate (result);
 
   if (direction == GST_PAD_SINK) {
-    GstVideoInfo in_info;
+    GstVideoInfo in_info, out_info;
 
     gst_video_info_from_caps (&in_info, caps);
-    if (!w)
-      gst_caps_set_simple(result, "width",
-        G_TYPE_INT, round_down_width (in_info.finfo, from_w), NULL);
-    if (!h)
-      gst_caps_set_simple(result, "height",
-        G_TYPE_INT, round_down_height (in_info.finfo, from_h), NULL);
+    gst_video_info_from_caps (&out_info, othercaps);
+    if (!w) {
+      gint out_width = MIN (round_down_width (in_info.finfo, from_w),
+        round_down_width (out_info.finfo, from_w));
+      gst_caps_set_simple (result, "width", G_TYPE_INT, out_width, NULL);
+    }
+    if (!h) {
+      gint out_height = MIN (round_down_height (in_info.finfo, from_h),
+        round_down_height (out_info.finfo, from_h));
+      gst_caps_set_simple (result, "height", G_TYPE_INT, out_height, NULL);
+    }
   }
   if (!gst_vsp_filter_is_caps_format_supported_for_vsp (space, direction,
           caps, result)) {
