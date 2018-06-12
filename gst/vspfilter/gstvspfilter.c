@@ -721,6 +721,35 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
     }
   }
 
+  GST_DEBUG_OBJECT (space,
+      "in_info->width=%d in_info->height=%d out_info->width=%d out_info->height=%d",
+      in_width, in_height, out_width, out_height);
+
+  /* sink pad in RPF */
+  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 0, in_width,
+          in_height, vsp_info->code[OUT])) {
+    GST_ERROR_OBJECT (space, "init_entity_pad failed");
+    return FALSE;
+  }
+  /* source pad in RPF */
+  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 1, in_width,
+          in_height, vsp_info->code[CAP])) {
+    GST_ERROR_OBJECT (space, "init_entity_pad failed");
+    return FALSE;
+  }
+  /* sink pad in WPF */
+  if (!init_entity_pad (space, vsp_info->v4lsub_fd[CAP], CAP, 0, out_width,
+          out_height, vsp_info->code[CAP])) {
+    GST_ERROR_OBJECT (space, "init_entity_pad failed");
+    return FALSE;
+  }
+  /* source pad in WPF */
+  if (!init_entity_pad (space, vsp_info->v4lsub_fd[CAP], CAP, 1, out_width,
+          out_height, vsp_info->code[CAP])) {
+    GST_ERROR_OBJECT (space, "init_entity_pad failed");
+    return FALSE;
+  }
+
   sprintf (tmp, "%s %s", vsp_info->ip_name, vsp_info->entity_name[OUT]);
   ret = get_media_entity (space, tmp, &vsp_info->entity[OUT]);
   GST_DEBUG_OBJECT (space, "ret = %d, entity[OUT] = %s", ret,
@@ -732,10 +761,6 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
 
   /* Deactivate the current pipeline. */
   deactivate_link (space, &vsp_info->entity[OUT]);
-
-  GST_DEBUG_OBJECT (space,
-      "in_info->width=%d in_info->height=%d out_info->width=%d out_info->height=%d",
-      in_width, in_height, out_width, out_height);
 
   /* link up entities for VSP1 V4L2 */
   if ((in_width != out_width) || (in_height != out_height)) {
@@ -805,31 +830,6 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
     }
     GST_DEBUG_OBJECT (space, "A link from %s to %s enabled.",
         vsp_info->entity_name[OUT], vsp_info->entity_name[CAP]);
-  }
-
-  /* sink pad in RPF */
-  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 0, in_width,
-          in_height, vsp_info->code[OUT])) {
-    GST_ERROR_OBJECT (space, "init_entity_pad failed");
-    return FALSE;
-  }
-  /* source pad in RPF */
-  if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 1, in_width,
-          in_height, vsp_info->code[CAP])) {
-    GST_ERROR_OBJECT (space, "init_entity_pad failed");
-    return FALSE;
-  }
-  /* sink pad in WPF */
-  if (!init_entity_pad (space, vsp_info->v4lsub_fd[CAP], CAP, 0, out_width,
-          out_height, vsp_info->code[CAP])) {
-    GST_ERROR_OBJECT (space, "init_entity_pad failed");
-    return FALSE;
-  }
-  /* source pad in WPF */
-  if (!init_entity_pad (space, vsp_info->v4lsub_fd[CAP], CAP, 1, out_width,
-          out_height, vsp_info->code[CAP])) {
-    GST_ERROR_OBJECT (space, "init_entity_pad failed");
-    return FALSE;
   }
 
   vsp_info->already_setup_info = TRUE;
