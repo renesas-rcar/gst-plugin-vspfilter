@@ -807,21 +807,6 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
         vsp_info->entity_name[OUT], vsp_info->entity_name[CAP]);
   }
 
-  if (!get_wpf_output_entity_name (space, tmp, sizeof (tmp))) {
-    GST_ERROR_OBJECT (space, "get_wpf_output_entity_name failed");
-    return FALSE;
-  }
-  ret = get_media_entity (space, tmp, &vsp_info->entity[3]);
-  ret = activate_link (space, &vsp_info->entity[CAP], &vsp_info->entity[3]);
-  if (ret) {
-    GST_ERROR_OBJECT (space,
-        "Cannot enable a link from %s to vsp1.2 wpf.0 output",
-        vsp_info->entity_name[CAP]);
-    return FALSE;
-  }
-  GST_DEBUG_OBJECT (space,
-      "%s has been linked as the terminal of the entities link", tmp);
-
   /* sink pad in RPF */
   if (!init_entity_pad (space, vsp_info->v4lsub_fd[OUT], OUT, 0, in_width,
           in_height, vsp_info->code[OUT])) {
