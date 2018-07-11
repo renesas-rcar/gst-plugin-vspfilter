@@ -318,7 +318,7 @@ static GstCaps *
 gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
     GstPadDirection direction, GstCaps * caps, GstCaps * filter)
 {
-  GstCaps *tmp, *tmp2;
+  GstCaps *tmp;
   GstCaps *result;
   GstCaps *caps_full_range_sizes;
   GstStructure *structure;
@@ -350,15 +350,13 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
   gst_caps_unref (tmp);
 
   if (filter) {
-    tmp2 = gst_caps_intersect_full (filter, caps_full_range_sizes,
+    result = gst_caps_intersect_full (filter, caps_full_range_sizes,
         GST_CAPS_INTERSECT_FIRST);
 
     gst_caps_unref (caps_full_range_sizes);
-    tmp = tmp2;
-  } else
-    tmp = caps_full_range_sizes;
-
-  result = tmp;
+  } else {
+    result = caps_full_range_sizes;
+  }
 
   GST_DEBUG_OBJECT (btrans, "transformed %" GST_PTR_FORMAT " into %"
       GST_PTR_FORMAT, caps, result);
