@@ -136,7 +136,8 @@ gst_vsp_filter_caps_remove_format_info (GstCaps * caps)
 
     st = gst_structure_copy (st);
     gst_structure_remove_fields (st, "format",
-        "colorimetry", "chroma-site", NULL);
+        "colorimetry", "chroma-site", "width",
+        "height", NULL);
 
     gst_caps_append_structure (res, st);
   }
@@ -320,42 +321,47 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
 {
   GstCaps *tmp;
   GstCaps *result;
-  GstCaps *caps_full_range_sizes;
+  GstCaps *caps_format_removed;
+  GstCaps *caps_intersected;
   GstStructure *structure;
   gint i, n;
 
   /* Get all possible caps that we can transform to */
   tmp = gst_vsp_filter_caps_remove_format_info (caps);
 
-  caps_full_range_sizes = gst_caps_new_empty ();
+  caps_format_removed = gst_caps_new_empty ();
   n = gst_caps_get_size (tmp);
   for (i = 0; i < n; i++) {
     structure = gst_caps_get_structure (tmp, i);
 
     /* If this is already expressed by the existing caps
      * skip this structure */
-    if (i > 0 && gst_caps_is_subset_structure (caps_full_range_sizes,
+    if (i > 0 && gst_caps_is_subset_structure (caps_format_removed,
             structure))
       continue;
 
     /* make copy */
     structure = gst_structure_copy (structure);
-    gst_structure_set (structure,
-        "width", GST_TYPE_INT_RANGE, 1, G_MAXINT,
-        "height", GST_TYPE_INT_RANGE, 1, G_MAXINT, NULL);
 
-    gst_caps_append_structure (caps_full_range_sizes, structure);
+    gst_caps_append_structure (caps_format_removed, structure);
   }
 
   gst_caps_unref (tmp);
 
+  /*Src and sink templates are same*/
+  GstCaps *template = gst_static_pad_template_get_caps (&gst_vsp_filter_src_template);
+
+  caps_intersected = gst_caps_intersect (caps_format_removed, template);
+  gst_caps_unref (caps_format_removed);
+  gst_caps_unref (template);
+
   if (filter) {
-    result = gst_caps_intersect_full (filter, caps_full_range_sizes,
+    result = gst_caps_intersect_full (filter, caps_intersected,
         GST_CAPS_INTERSECT_FIRST);
 
-    gst_caps_unref (caps_full_range_sizes);
+    gst_caps_unref (caps_intersected);
   } else {
-    result = caps_full_range_sizes;
+    result = caps_intersected;
   }
 
   GST_DEBUG_OBJECT (btrans, "transformed %" GST_PTR_FORMAT " into %"
