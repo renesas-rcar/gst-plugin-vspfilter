@@ -67,7 +67,12 @@ enum
 
 #define CSP_VIDEO_CAPS \
     "video/x-raw, " \
-        "format = (string) {RGB16, RGB, BGR, ARGB, xRGB, BGRA, BGRx, I420, NV12, NV21, NV16, UYVY, YUY2}," \
+        "format = (string) {I420, NV12, NV21, NV16, UYVY, YUY2}," \
+        "width = [ 1, 8190 ], " \
+        "height = [ 1, 8190 ], " \
+        "framerate = " GST_VIDEO_FPS_RANGE ";" \
+    "video/x-raw, " \
+        "format = (string) {RGB16, RGB, BGR, ARGB, xRGB, BGRA, BGRx}," \
         "width = [ 1, 8190 ], " \
         "height = [ 1, 8190 ], " \
         "framerate = " GST_VIDEO_FPS_RANGE
@@ -335,6 +340,42 @@ gst_vsp_filter_filter_meta (GstBaseTransform * trans, GstQuery * query,
   return TRUE;
 }
 
+void
+gst_vspfilter_set_colorimetry (GstCaps * caps, GstCaps * caps_intersected)
+{
+  gint i;
+  gint n_struct;
+  GstStructure *st_src, *st_dest;
+  const GValue *src_fmt, *dest_fmt;
+  const GValue *src_cimetry;
+
+  n_struct = gst_caps_get_size (caps_intersected);
+
+  if (!GST_CAPS_IS_SIMPLE(caps))
+    return;
+
+  st_src = gst_caps_get_structure (caps, 0);
+
+  if (!gst_structure_has_field (st_src, "colorimetry"))
+    return;
+
+  src_fmt = gst_structure_get_value (st_src, "format");
+  src_cimetry = gst_structure_get_value (st_src, "colorimetry");
+
+  for (i = 0; i < n_struct; i++) {
+    st_dest = gst_caps_get_structure (caps_intersected, i);
+    dest_fmt = gst_structure_get_value (st_dest, "format");
+    if (gst_value_is_subset (src_fmt, dest_fmt)) {
+      gst_structure_set_value (st_dest, "colorimetry", src_cimetry);
+    } else if (gst_value_is_fixed (src_cimetry)) {
+      struct colorimetry *color = NULL;
+      color = find_colorimetry(src_cimetry);
+      if (color)
+        gst_structure_set_value (st_dest, "colorimetry", &color->dest_value);
+    }
+  }
+}
+
 /* The caps can be transformed into any other caps with format info removed.
  * However, we should prefer passthrough, so if passthrough is possible,
  * put it first in the list. */
@@ -377,6 +418,9 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
   caps_intersected = gst_caps_intersect (caps_format_removed, template);
   gst_caps_unref (caps_format_removed);
   gst_caps_unref (template);
+
+  if (direction == GST_PAD_SINK)
+    gst_vspfilter_set_colorimetry (caps, caps_intersected);
 
   if (filter) {
     result = gst_caps_intersect_full (filter, caps_intersected,
@@ -1591,6 +1635,7 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   GstBufferPool *in_newpool;
   GstBufferPool *out_newpool;
   guint buf_min = 0, buf_max = 0;
+  GstStructure *ins, *outs;
 
   space = GST_VSP_FILTER_CAST (filter);
   fclass = GST_VIDEO_FILTER_GET_CLASS (filter);
@@ -1611,6 +1656,18 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   /* if present, these must match too */
   if (in_info.interlace_mode != out_info.interlace_mode)
     goto format_mismatch;
+
+  ins = gst_caps_get_structure (incaps, 0);
+  if (!find_colorimetry (gst_structure_get_value (ins, "colorimetry"))) {
+    in_info.colorimetry.range = GST_VIDEO_COLOR_RANGE_UNKNOWN;
+    in_info.colorimetry.matrix = GST_VIDEO_COLOR_MATRIX_UNKNOWN;
+  }
+
+  outs = gst_caps_get_structure (outcaps, 0);
+  if (!find_colorimetry (gst_structure_get_value (outs, "colorimetry"))) {
+    out_info.colorimetry.range = GST_VIDEO_COLOR_RANGE_UNKNOWN;
+    out_info.colorimetry.matrix = GST_VIDEO_COLOR_MATRIX_UNKNOWN;
+  }
 
   GST_DEBUG ("reconfigured %d %d", GST_VIDEO_INFO_FORMAT (&in_info),
       GST_VIDEO_INFO_FORMAT (&out_info));
@@ -1837,6 +1894,8 @@ gst_vsp_filter_init (GstVspFilter * space)
 
   space->vsp_info = vsp_info;
   space->input_color_range = DEFAULT_PROP_COLOR_RANGE;
+
+  init_colorimetry_table();
 }
 
 static void

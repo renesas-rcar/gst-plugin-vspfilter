@@ -107,6 +107,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   guint width, height;
   enum v4l2_ycbcr_encoding encoding;
   enum v4l2_quantization quant;
+  GstStructure *st;
 
   if (!gst_buffer_pool_config_get_params (config, &caps, NULL, NULL,
           &max_buffers)) {
@@ -130,6 +131,12 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   }
 
   vinfo = &self->vinfo;
+
+  st = gst_caps_get_structure (caps, 0);
+  if (!find_colorimetry (gst_structure_get_value (st, "colorimetry"))) {
+    vinfo->colorimetry.range = GST_VIDEO_COLOR_RANGE_UNKNOWN;
+    vinfo->colorimetry.matrix = GST_VIDEO_COLOR_MATRIX_UNKNOWN;
+  }
 
   /* Convert a pixel format definition from GStreamer to V4L2 */
   ret = set_colorspace (vinfo->finfo->format, &pix_fmt, NULL, &self->n_planes);

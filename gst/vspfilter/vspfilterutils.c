@@ -57,6 +57,49 @@ static const struct extensions_t exts[] = {
   {GST_VIDEO_FORMAT_YUY2, V4L2_PIX_FMT_YUYV, V4L2_MBUS_FMT_AYUV8_1X32, 1},
 };
 
+static struct colorimetry colorimetries[] = {
+  {"bt601", "{sRGB}", 0, 0},
+  {"bt709", "{sRGB, 2:1:7:1}", 0, 0},
+  {"1:4:5:4", "{sRGB}", 0, 0},
+  {"sRGB", "{bt601, bt709, 1:4:5:4}", 0, 0},
+  {"2:1:7:1", "{bt709}", 0, 0}
+};
+
+void
+init_colorimetry_table ()
+{
+  gint i;
+  gint n_cimetries = sizeof (colorimetries) / sizeof (colorimetries[0]);
+
+  for (i = 0; i < n_cimetries; i++) {
+    g_value_init (&colorimetries[i].src_value, G_TYPE_STRING);
+    g_value_init (&colorimetries[i].dest_value, GST_TYPE_LIST);
+    gst_value_deserialize (&colorimetries[i].src_value,
+      colorimetries[i].src);
+    gst_value_deserialize (&colorimetries[i].dest_value,
+      colorimetries[i].dest);
+  }
+}
+
+struct colorimetry *
+find_colorimetry (const GValue *src)
+{
+  gint i;
+  gint n_cimetries = sizeof (colorimetries) / sizeof (colorimetries[0]);
+
+  if (!src)
+    return NULL;
+
+  for (i = 0; i < n_cimetries; i++) {
+    if (gst_value_compare (src, &colorimetries[i].src_value)
+          == GST_VALUE_EQUAL) {
+      return &colorimetries[i];
+    }
+  }
+
+  return NULL;
+}
+
 enum v4l2_ycbcr_encoding
 set_encoding (GstVideoColorMatrix matrix)
 {

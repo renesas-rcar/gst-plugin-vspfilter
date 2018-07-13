@@ -23,6 +23,14 @@
 #include <gst/video/video.h>
 #include <linux/v4l2-mediabus.h>
 
+struct colorimetry
+{
+  gchar src[16];
+  gchar dest[64];
+  GValue src_value;
+  GValue dest_value;
+};
+
 #define CLEAR(x) memset (&(x), 0, sizeof (x))
 
 static inline const gchar *
@@ -36,6 +44,8 @@ buftype_str (enum v4l2_buf_type buftype)
   return "unknown";
 }
 
+void init_colorimetry_table (void);
+struct colorimetry * find_colorimetry (const GValue *src);
 enum v4l2_ycbcr_encoding set_encoding (GstVideoColorMatrix matrix);
 enum v4l2_quantization set_quantization (GstVideoColorRange color_range);
 guint round_down_width (const GstVideoFormatInfo *finfo, guint width);
