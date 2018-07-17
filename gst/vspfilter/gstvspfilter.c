@@ -551,7 +551,7 @@ deactivate_link (GstVspFilter * space, struct media_entity_desc *src)
 {
   struct media_links_enum links;
   struct media_link_desc *target_link;
-  int ret, i;
+  gint ret, i;
   GstVspFilterVspInfo *vsp_info;
 
   vsp_info = space->vsp_info;
