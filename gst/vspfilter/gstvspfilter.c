@@ -697,19 +697,27 @@ leave:
 }
 
 static gboolean
-set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
-    gint in_height, gint in_stride[GST_VIDEO_MAX_PLANES],
-    gboolean need_in_setfmt, GstVideoFormat out_fmt, gint out_width,
-    gint out_height, gint out_stride[GST_VIDEO_MAX_PLANES],
-    gboolean need_out_setfmt, enum v4l2_memory io[MAX_DEVICES])
+set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
+    gint in_stride[GST_VIDEO_MAX_PLANES], GstVideoInfo *out_info,
+    gint out_stride[GST_VIDEO_MAX_PLANES], enum v4l2_memory io[MAX_DEVICES])
 {
   GstVspFilterVspInfo *vsp_info;
   const GstVideoFormatInfo *in_finfo;
   gint ret;
   gchar tmp[256];
   guint n_bufs;
+  GstVideoFormat in_fmt, out_fmt;
+  gint in_width, in_height, out_width, out_height;
 
   vsp_info = space->vsp_info;
+
+  in_fmt = in_info->finfo->format;
+  out_fmt = out_info->finfo->format;
+
+  in_width = in_info->width;
+  in_height = in_info->height;
+  out_width = out_info->width;
+  out_height = out_info->height;
 
   if (vsp_info->already_setup_info)
     return TRUE;
@@ -743,7 +751,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
   guint in_img_width = round_down_width (in_finfo, in_width);
   guint in_img_height = round_down_height (in_finfo, in_height);
 
-  if (need_in_setfmt) {
+  if (io[OUT] != V4L2_MEMORY_MMAP) {
     if (!set_format (vsp_info->v4lout_fd, in_buf_width, in_buf_height,
             vsp_info->format[OUT],
             in_stride, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT])) {
@@ -760,7 +768,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoFormat in_fmt, gint in_width,
     }
   }
 
-  if (need_out_setfmt) {
+  if (io[CAP] != V4L2_MEMORY_MMAP) {
     if (!set_format (vsp_info->v4lcap_fd, out_width, out_height,
             vsp_info->format[CAP],
             out_stride, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io[CAP])) {
@@ -1951,10 +1959,8 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   io[OUT] = in_vframe_info->io;
   io[CAP] = out_vframe_info->io;
 
-  if (!set_vsp_entities (space, in_info->finfo->format, in_info->width,
-          in_info->height, in_stride, in_vframe_info->io != V4L2_MEMORY_MMAP,
-          out_info->finfo->format, out_info->width, out_info->height,
-          out_stride, out_vframe_info->io != V4L2_MEMORY_MMAP, io)) {
+  if (!set_vsp_entities (space, in_info, in_stride,
+          out_info, out_stride, io)) {
     GST_ERROR_OBJECT (space, "set_vsp_entities failed");
     return GST_FLOW_ERROR;
   }
