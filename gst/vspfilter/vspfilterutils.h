@@ -36,6 +36,8 @@ buftype_str (enum v4l2_buf_type buftype)
   return "unknown";
 }
 
+enum v4l2_ycbcr_encoding set_encoding (GstVideoColorMatrix matrix);
+enum v4l2_quantization set_quantization (GstVideoColorRange color_range);
 guint round_down_width (const GstVideoFormatInfo *finfo, guint width);
 guint round_down_height (const GstVideoFormatInfo *finfo, guint height);
 guint round_up_width (const GstVideoFormatInfo *finfo, guint width);
@@ -45,7 +47,8 @@ gint set_colorspace (GstVideoFormat vid_fmt, guint * fourcc,
 gint xioctl (gint fd, gint request, void * arg);
 gboolean set_format (gint fd, guint width, guint height, guint format,
     gint stride[GST_VIDEO_MAX_PLANES], enum v4l2_buf_type buftype,
-    enum v4l2_memory io);
+    enum v4l2_memory io, enum v4l2_ycbcr_encoding encoding,
+    enum v4l2_quantization quant);
 gboolean request_buffers (gint fd, enum v4l2_buf_type buftype, guint * n_bufs,
     enum v4l2_memory io);
 

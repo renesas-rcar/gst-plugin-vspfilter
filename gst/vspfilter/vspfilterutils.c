@@ -57,6 +57,32 @@ static const struct extensions_t exts[] = {
   {GST_VIDEO_FORMAT_YUY2, V4L2_PIX_FMT_YUYV, V4L2_MBUS_FMT_AYUV8_1X32, 1},
 };
 
+enum v4l2_ycbcr_encoding
+set_encoding (GstVideoColorMatrix matrix)
+{
+  switch (matrix) {
+    case GST_VIDEO_COLOR_MATRIX_BT601:
+      return V4L2_YCBCR_ENC_601;
+    case GST_VIDEO_COLOR_MATRIX_BT709:
+      return V4L2_YCBCR_ENC_709;
+    default:
+      return V4L2_YCBCR_ENC_DEFAULT;
+  }
+}
+
+enum v4l2_quantization
+set_quantization (GstVideoColorRange color_range)
+{
+  switch (color_range) {
+    case GST_VIDEO_COLOR_RANGE_0_255:
+      return V4L2_QUANTIZATION_FULL_RANGE;
+    case GST_VIDEO_COLOR_RANGE_16_235:
+      return V4L2_QUANTIZATION_LIM_RANGE;
+    default:
+      return V4L2_QUANTIZATION_DEFAULT;
+  }
+}
+
 guint
 round_down_width (const GstVideoFormatInfo *finfo, guint width)
 {
@@ -156,7 +182,8 @@ request_buffers (gint fd, enum v4l2_buf_type buftype, guint * n_bufs,
 gboolean
 set_format (gint fd, guint width, guint height, guint format,
     gint stride[GST_VIDEO_MAX_PLANES], enum v4l2_buf_type buftype,
-    enum v4l2_memory io)
+    enum v4l2_memory io, enum v4l2_ycbcr_encoding encoding,
+    enum v4l2_quantization quant)
 {
   struct v4l2_format fmt;
   gint i;
@@ -168,6 +195,8 @@ set_format (gint fd, guint width, guint height, guint format,
   fmt.fmt.pix_mp.height = height;
   fmt.fmt.pix_mp.pixelformat = format;
   fmt.fmt.pix_mp.field = V4L2_FIELD_NONE;
+  fmt.fmt.pix_mp.ycbcr_enc = encoding;
+  fmt.fmt.pix_mp.quantization = quant;
 
   if (stride) {
     for (i = 0; i < GST_VIDEO_MAX_PLANES; i++) {
