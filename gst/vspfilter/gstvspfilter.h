@@ -62,6 +62,15 @@ G_BEGIN_DECLS
 #define DEFAULT_PROP_VSP_DEVFILE_OUTPUT "/dev/video1"
 
 typedef enum {
+  GST_VSPFILTER_AUTO_COLOR_RANGE = V4L2_QUANTIZATION_DEFAULT,
+  GST_VSPFILTER_FULL_COLOR_RANGE = V4L2_QUANTIZATION_FULL_RANGE,
+  GST_VSPFILTER_LIMITED_COLOR_RANGE = V4L2_QUANTIZATION_LIM_RANGE,
+  GST_VSPFILTER_DEFAULT_COLOR_RANGE = -1,
+} GstVspfilterColorRange;
+
+#define DEFAULT_PROP_COLOR_RANGE GST_VSPFILTER_DEFAULT_COLOR_RANGE
+
+typedef enum {
   GST_VSPFILTER_IO_AUTO = 0, /* dmabuf or mmap */
   GST_VSPFILTER_IO_USERPTR,
 } GstVspfilterIOMode;
@@ -131,6 +140,7 @@ struct _GstVspFilter {
   GstBufferPool *out_pool;
   GstVspfilterIOMode prop_in_mode;
   GstVspfilterIOMode prop_out_mode;
+  GstVspfilterColorRange input_color_range;
 };
 
 struct _GstVspFilterClass

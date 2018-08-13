@@ -62,6 +62,7 @@ enum
   PROP_VSP_DEVFILE_OUTPUT,
   PROP_INPUT_IO_MODE,
   PROP_OUTPUT_IO_MODE,
+  PROP_INPUT_COLOR_RANGE
 };
 
 #define CSP_VIDEO_CAPS \
@@ -97,6 +98,28 @@ static GstFlowReturn gst_vsp_filter_transform_frame_process (GstVideoFilter *
     gint out_stride[GST_VIDEO_MAX_PLANES], guint in_index, guint out_index);
 
 static gboolean gst_vsp_filter_stop (GstBaseTransform *trans);
+
+#define GST_TYPE_VSPFILTER_COLOR_RANGE (gst_vsp_filter_color_range_get_type ())
+static GType
+gst_vsp_filter_color_range_get_type (void)
+{
+  static GType vspfilter_color_range = 0;
+
+  static const GEnumValue color_ranges[] = {
+    {GST_VSPFILTER_AUTO_COLOR_RANGE,
+      "GST_VSPFILTER_AUTO_COLOR_RANGE", "auto"},
+    {GST_VSPFILTER_FULL_COLOR_RANGE,
+      "GST_VSPFILTER_FULL_COLOR_RANGE", "full"},
+    {GST_VSPFILTER_LIMITED_COLOR_RANGE,
+      "GST_VSPFILTER_LIMITED_COLOR_RANGE", "limited"},
+    {GST_VSPFILTER_DEFAULT_COLOR_RANGE,
+      "GST_VSPFILTER_DEFAULT_COLOR_RANGE", "default"},
+    {0, NULL, NULL}
+  };
+  vspfilter_color_range = g_enum_register_static ("GstVspfilterColorRange", color_ranges);
+
+  return vspfilter_color_range;
+}
 
 #define GST_TYPE_VSPFILTER_IO_MODE (gst_vsp_filter_io_mode_get_type ())
 static GType
@@ -756,7 +779,10 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
     enum v4l2_quantization in_quant;
 
     in_encoding = set_encoding (in_info->colorimetry.matrix);
-    in_quant = set_quantization (in_info->colorimetry.range);
+    if (space->input_color_range != GST_VSPFILTER_DEFAULT_COLOR_RANGE)
+      in_quant = space->input_color_range;
+    else
+      in_quant = set_quantization (in_info->colorimetry.range);
 
     if (!set_format (vsp_info->v4lout_fd, in_buf_width, in_buf_height,
             vsp_info->format[OUT], in_stride,
@@ -1751,6 +1777,12 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
           GST_TYPE_VSPFILTER_IO_MODE, DEFAULT_PROP_IO_MODE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_INPUT_COLOR_RANGE,
+      g_param_spec_enum ("input-color-range", "Input color range",
+          "Color range of incoming video buffer",
+          GST_TYPE_VSPFILTER_COLOR_RANGE, DEFAULT_PROP_COLOR_RANGE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&gst_vsp_filter_src_template));
   gst_element_class_add_pad_template (gstelement_class,
@@ -1804,6 +1836,7 @@ gst_vsp_filter_init (GstVspFilter * space)
   vsp_info->resz_subdev_fd = -1;
 
   space->vsp_info = vsp_info;
+  space->input_color_range = DEFAULT_PROP_COLOR_RANGE;
 }
 
 static void
@@ -1835,6 +1868,9 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
     case PROP_OUTPUT_IO_MODE:
       space->prop_out_mode = g_value_get_enum (value);
       break;
+    case PROP_INPUT_COLOR_RANGE:
+      space->input_color_range = g_value_get_enum (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -1863,6 +1899,9 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
       break;
     case PROP_OUTPUT_IO_MODE:
       g_value_set_enum (value, space->prop_out_mode);
+      break;
+    case PROP_INPUT_COLOR_RANGE:
+      g_value_set_enum (value, space->input_color_range);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
