@@ -195,7 +195,6 @@ set_format (gint fd, guint width, guint height, guint format,
   fmt.fmt.pix_mp.height = height;
   fmt.fmt.pix_mp.pixelformat = format;
   fmt.fmt.pix_mp.field = V4L2_FIELD_NONE;
-  fmt.fmt.pix_mp.ycbcr_enc = encoding;
   fmt.fmt.pix_mp.quantization = quant;
 
   if (stride) {
@@ -206,6 +205,15 @@ set_format (gint fd, guint width, guint height, guint format,
         fmt.fmt.pix_mp.plane_fmt[i].bytesperline = stride[i];
       }
     }
+  }
+
+  /* BT.709 full range is not supported by hardware.
+     Fall back to BT.601 full range */
+  if (encoding == V4L2_YCBCR_ENC_709 &&
+      quant == V4L2_QUANTIZATION_FULL_RANGE) {
+    fmt.fmt.pix_mp.ycbcr_enc = V4L2_YCBCR_ENC_601;
+  } else {
+    fmt.fmt.pix_mp.ycbcr_enc = encoding;
   }
 
   if (-1 == xioctl (fd, VIDIOC_S_FMT, &fmt)) {
