@@ -752,9 +752,15 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   guint in_img_height = round_down_height (in_finfo, in_height);
 
   if (io[OUT] != V4L2_MEMORY_MMAP) {
+    enum v4l2_ycbcr_encoding in_encoding;
+    enum v4l2_quantization in_quant;
+
+    in_encoding = set_encoding (in_info->colorimetry.matrix);
+    in_quant = set_quantization (in_info->colorimetry.range);
+
     if (!set_format (vsp_info->v4lout_fd, in_buf_width, in_buf_height,
-            vsp_info->format[OUT],
-            in_stride, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT])) {
+            vsp_info->format[OUT], in_stride,
+            V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT], in_encoding, in_quant)) {
       GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
           vsp_info->dev_name[OUT], in_width, in_height);
       return FALSE;
@@ -769,9 +775,15 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   }
 
   if (io[CAP] != V4L2_MEMORY_MMAP) {
+    enum v4l2_ycbcr_encoding out_encoding;
+    enum v4l2_quantization out_quant;
+
+    out_encoding = set_encoding (out_info->colorimetry.matrix);
+    out_quant = set_quantization (out_info->colorimetry.range);
+
     if (!set_format (vsp_info->v4lcap_fd, out_width, out_height,
-            vsp_info->format[CAP],
-            out_stride, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io[CAP])) {
+            vsp_info->format[CAP], out_stride,
+            V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, io[CAP], out_encoding, out_quant)) {
       GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
           vsp_info->dev_name[CAP], out_width, out_height);
       return FALSE;

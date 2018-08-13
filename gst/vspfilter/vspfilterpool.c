@@ -105,6 +105,8 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   guint n_reqbufs;
   gint ret;
   guint width, height;
+  enum v4l2_ycbcr_encoding encoding;
+  enum v4l2_quantization quant;
 
   if (!gst_buffer_pool_config_get_params (config, &caps, NULL, NULL,
           &max_buffers)) {
@@ -158,8 +160,11 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
     height = vinfo->height;
   }
 
+  encoding = set_encoding (vinfo->colorimetry.matrix);
+  quant = set_quantization (vinfo->colorimetry.range);
+
   if (!set_format (self->fd, width, height, pix_fmt,
-          self->stride, self->buftype, V4L2_MEMORY_MMAP)) {
+          self->stride, self->buftype, V4L2_MEMORY_MMAP, encoding, quant)) {
     GST_ERROR_OBJECT (self, "set_format for %s failed (%dx%d)",
         buftype_str (self->buftype), vinfo->width, vinfo->height);
     return FALSE;
