@@ -262,26 +262,57 @@ gst_vsp_filter_is_caps_format_supported_for_vsp (GstVspFilter * space,
   return TRUE;
 }
 
+static gboolean
+intersect_format (GstCapsFeatures * features, GstStructure * structure,
+gpointer user_data)
+{
+  const GValue *in_format = user_data;
+  GValue out_format = {0};
+
+  if (!gst_value_intersect (&out_format, in_format,
+       gst_structure_get_value (structure, "format"))) {
+    return FALSE;
+  }
+
+  gst_structure_fixate_field_string (structure, "format",
+    gst_value_serialize (&out_format));
+
+  return TRUE;
+}
+
 static GstCaps *
 gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
     GstPadDirection direction, GstCaps * caps, GstCaps * othercaps)
 {
   GstCaps *result;
+  GstCaps *outcaps;
   gint from_w, from_h;
   gint w = 0, h = 0;
   GstStructure *ins, *outs;
   GstVspFilter *space;
+  const GValue *in_format;
 
   space = GST_VSP_FILTER_CAST (trans);
 
   GST_DEBUG_OBJECT (trans, "caps %" GST_PTR_FORMAT, caps);
   GST_DEBUG_OBJECT (trans, "othercaps %" GST_PTR_FORMAT, othercaps);
 
-  othercaps = gst_caps_truncate (othercaps);
   othercaps = gst_caps_make_writable (othercaps);
 
   ins = gst_caps_get_structure (caps, 0);
-  outs = gst_caps_get_structure (othercaps, 0);
+  in_format = gst_structure_get_value(ins, "format");
+
+  outcaps = gst_caps_copy (othercaps);
+  gst_caps_filter_and_map_in_place (outcaps, intersect_format,
+    (gpointer)in_format);
+
+  if (gst_caps_is_empty (outcaps))
+    gst_caps_replace (&outcaps, othercaps);
+
+  gst_caps_unref (othercaps);
+
+  outcaps = gst_caps_truncate (outcaps);
+  outs = gst_caps_get_structure (outcaps, 0);
 
   gst_structure_get_int (ins, "width", &from_w);
   gst_structure_get_int (ins, "height", &from_h);
@@ -294,12 +325,12 @@ gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
     gst_structure_fixate_field_nearest_int (outs, "width", from_w);
   }
 
-  result = gst_caps_intersect (othercaps, caps);
+  result = gst_caps_intersect (outcaps, caps);
   if (gst_caps_is_empty (result)) {
     gst_caps_unref (result);
-    result = othercaps;
+    result = outcaps;
   } else {
-    gst_caps_unref (othercaps);
+    gst_caps_unref (outcaps);
   }
 
   /* fixate remaining fields */
