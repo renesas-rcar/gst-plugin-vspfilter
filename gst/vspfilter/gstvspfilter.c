@@ -309,7 +309,7 @@ gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
     GstVideoInfo in_info, out_info;
 
     gst_video_info_from_caps (&in_info, caps);
-    gst_video_info_from_caps (&out_info, othercaps);
+    gst_video_info_from_caps (&out_info, result);
     if (!w) {
       gint out_width = MIN (round_down_width (in_info.finfo, from_w),
         round_down_width (out_info.finfo, from_w));
