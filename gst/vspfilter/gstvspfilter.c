@@ -1,7 +1,7 @@
 /* GStreamer
  * Copyright (C) <1999> Erik Walthinsen <omega@cse.ogi.edu>
  * This file:
- * Copyright (C) 2014-2017 Renesas Electronics Corporation
+ * Copyright (C) 2014-2018 Renesas Electronics Corporation
  * Based on videoconvert by Ronald Bultje <rbultje@ronald.bitfreak.net>
  *                          David Schleef <ds@schleef.org>
  *
