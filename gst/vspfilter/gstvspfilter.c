@@ -731,7 +731,7 @@ set_crop (GstVspFilter * space, gint fd, guint * width, guint * height)
 }
 
 static gboolean
-init_entity_pad (GstVspFilter * space, gint fd, gint dev_index, guint pad,
+init_entity_pad (GstVspFilter * space, gint fd, guint dev_index, guint pad,
     guint width, guint height, guint code)
 {
   struct v4l2_subdev_format sfmt;
@@ -1025,7 +1025,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
 }
 
 static void
-close_device (GstVspFilter * space, gint fd, gint dev_index)
+close_device (GstVspFilter * space, gint fd, guint dev_index)
 {
   GST_DEBUG_OBJECT (space, "closing the device ...");
 
@@ -1037,7 +1037,7 @@ close_device (GstVspFilter * space, gint fd, gint dev_index)
 }
 
 static void
-stop_capturing (GstVspFilter * space, int fd, int dev_index,
+stop_capturing (GstVspFilter * space, int fd, guint dev_index,
     enum v4l2_buf_type buftype)
 {
   GstVspFilterVspInfo *vsp_info;
@@ -1071,7 +1071,7 @@ gst_vsp_filter_finalize (GObject * obj)
 }
 
 static gboolean
-init_device (GstVspFilter * space, gint fd, gint dev_index, guint captype,
+init_device (GstVspFilter * space, gint fd, guint dev_index, guint captype,
     enum v4l2_buf_type buftype)
 {
   GstVspFilterVspInfo *vsp_info;
@@ -1140,7 +1140,7 @@ init_device (GstVspFilter * space, gint fd, gint dev_index, guint captype,
 }
 
 static gint
-open_device (GstVspFilter * space, gint dev_index)
+open_device (GstVspFilter * space, guint dev_index)
 {
   GstVspFilterVspInfo *vsp_info;
   struct stat st;
@@ -2003,7 +2003,7 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
 }
 
 static gint
-queue_buffer (GstVspFilter * space, int fd, int dev_index,
+queue_buffer (GstVspFilter * space, int fd, guint dev_index,
     enum v4l2_buf_type buftype, struct v4l2_plane *planes,
     enum v4l2_memory io[MAX_DEVICES], guint buf_index)
 {
@@ -2030,7 +2030,7 @@ queue_buffer (GstVspFilter * space, int fd, int dev_index,
 }
 
 static gint
-dequeue_buffer (GstVspFilter * space, int fd, int dev_index,
+dequeue_buffer (GstVspFilter * space, int fd, guint dev_index,
     enum v4l2_buf_type buftype, struct v4l2_plane *planes,
     enum v4l2_memory io[MAX_DEVICES])
 {
@@ -2056,7 +2056,7 @@ dequeue_buffer (GstVspFilter * space, int fd, int dev_index,
 }
 
 static gboolean
-start_capturing (GstVspFilter * space, int fd, int dev_index,
+start_capturing (GstVspFilter * space, int fd, guint dev_index,
     enum v4l2_buf_type buftype)
 {
   if (-1 == xioctl (fd, VIDIOC_STREAMON, &buftype)) {
@@ -2085,7 +2085,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   GstVideoInfo *out_info;
   enum v4l2_memory io[MAX_DEVICES];
   gint i;
-  int in_height, plane_height;
+  guint in_height, plane_height;
 
   memset (in_planes, 0, sizeof (in_planes));
   memset (out_planes, 0, sizeof (out_planes));
