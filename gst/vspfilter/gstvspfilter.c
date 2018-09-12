@@ -418,6 +418,7 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
   GstCaps *result;
   GstCaps *caps_format_removed;
   GstCaps *caps_intersected;
+  GstCaps *template;
   GstStructure *structure;
   gint i, n;
 
@@ -444,7 +445,7 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
   gst_caps_unref (tmp);
 
   /*Src and sink templates are same*/
-  GstCaps *template = gst_static_pad_template_get_caps (&gst_vsp_filter_src_template);
+  template = gst_static_pad_template_get_caps (&gst_vsp_filter_src_template);
 
   caps_intersected = gst_caps_intersect (caps_format_removed, template);
   gst_caps_unref (caps_format_removed);
@@ -806,6 +807,8 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   guint n_bufs;
   GstVideoFormat in_fmt, out_fmt;
   gint in_width, in_height, out_width, out_height;
+  guint in_buf_width, in_buf_height;
+  guint in_img_width, in_img_height;
 
   vsp_info = space->vsp_info;
 
@@ -844,10 +847,10 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   in_finfo = gst_video_format_get_info (in_fmt);
 
   /*in case odd size of yuv buffer, separate buffer and image size*/
-  guint in_buf_width = round_up_width (in_finfo, in_width);
-  guint in_buf_height = round_up_height (in_finfo, in_height);
-  guint in_img_width = round_down_width (in_finfo, in_width);
-  guint in_img_height = round_down_height (in_finfo, in_height);
+  in_buf_width = round_up_width (in_finfo, in_width);
+  in_buf_height = round_up_height (in_finfo, in_height);
+  in_img_width = round_down_width (in_finfo, in_width);
+  in_img_height = round_down_height (in_finfo, in_height);
 
   if (io[OUT] != V4L2_MEMORY_MMAP) {
     enum v4l2_ycbcr_encoding in_encoding;
@@ -2082,6 +2085,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   GstVideoInfo *out_info;
   enum v4l2_memory io[MAX_DEVICES];
   gint i;
+  int in_height, plane_height;
 
   memset (in_planes, 0, sizeof (in_planes));
   memset (out_planes, 0, sizeof (out_planes));
@@ -2107,7 +2111,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
   }
 
   /* set up planes for queuing input buffers */
-  int in_height = round_up_height (in_info->finfo, in_info->height);
+  in_height = round_up_height (in_info->finfo, in_info->height);
   for (i = 0; i < vsp_info->n_planes[OUT]; i++) {
     switch (in_vframe_info->io) {
       case V4L2_MEMORY_USERPTR:
@@ -2123,7 +2127,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
         GST_ERROR_OBJECT (space, "unsupported V4L2 I/O method");
         return GST_FLOW_ERROR;
     }
-    int plane_height = GST_VIDEO_SUB_SCALE (
+    plane_height = GST_VIDEO_SUB_SCALE (
       GST_VIDEO_FORMAT_INFO_H_SUB (in_info->finfo, i), in_height);
     in_planes[i].length = in_stride[i] * plane_height;
     in_planes[i].bytesused = in_planes[i].length;
