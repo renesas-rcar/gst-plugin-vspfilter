@@ -218,7 +218,7 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
   VspfilterBuffer *vf_buffer;
   struct v4l2_exportbuffer expbuf;
-  guint index = VSPFILTER_INDEX_INVALID;
+  guint buf_index = VSPFILTER_INDEX_INVALID;
   gsize size;
   gsize total = 0;
   gsize offset[GST_VIDEO_MAX_PLANES];
@@ -227,25 +227,25 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
 
   for (i = 0; i < self->n_buffers; i++) {
     if (!self->exported[i]) {
-      index = i;
+      buf_index = i;
       break;
     }
   }
 
-  if (index == VSPFILTER_INDEX_INVALID) {
+  if (buf_index == VSPFILTER_INDEX_INVALID) {
     GST_ERROR_OBJECT (self, "No buffers are left");
     return GST_FLOW_ERROR;
   }
 
   vf_buffer = g_slice_new0 (VspfilterBuffer);
   vf_buffer->buffer = gst_buffer_new ();
-  vf_buffer->index = index;
+  vf_buffer->index = buf_index;
 
   for (i = 0; i < self->n_planes; i++) {
     memset (&expbuf, 0, sizeof (expbuf));
 
     expbuf.type = self->buftype;
-    expbuf.index = index;
+    expbuf.index = buf_index;
     expbuf.plane = i;
     expbuf.flags = O_CLOEXEC | O_RDWR;
 
@@ -253,7 +253,7 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
     if (ret < 0) {
       GST_ERROR_OBJECT (self,
           "Failed to export dmabuf for %s (index:%d, plane:%d) errno=%d",
-          buftype_str (self->buftype), index, i, errno);
+          buftype_str (self->buftype), buf_index, i, errno);
       gst_buffer_unref (vf_buffer->buffer);
       free_vf_buffer (vf_buffer);
       return GST_FLOW_ERROR;
@@ -273,7 +273,7 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
       GST_VIDEO_INFO_HEIGHT (&self->vinfo), self->n_planes, offset,
       self->stride);
 
-  self->exported[index] = TRUE;
+  self->exported[buf_index] = TRUE;
 
   gst_mini_object_set_qdata ((GstMiniObject *) vf_buffer->buffer,
       vspfilter_buffer_qdata_quark (), vf_buffer, free_vf_buffer);

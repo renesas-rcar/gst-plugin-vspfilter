@@ -730,7 +730,7 @@ set_crop (GstVspFilter * space, gint fd, guint * width, guint * height)
 }
 
 static gboolean
-init_entity_pad (GstVspFilter * space, gint fd, gint index, guint pad,
+init_entity_pad (GstVspFilter * space, gint fd, gint dev_index, guint pad,
     guint width, guint height, guint code)
 {
   struct v4l2_subdev_format sfmt;
@@ -747,7 +747,7 @@ init_entity_pad (GstVspFilter * space, gint fd, gint index, guint pad,
 
   if (-1 == xioctl (fd, VIDIOC_SUBDEV_S_FMT, &sfmt)) {
     GST_ERROR_OBJECT (space, "VIDIOC_SUBDEV_S_FMT for %s failed.",
-        space->vsp_info->entity_name[index]);
+        space->vsp_info->entity_name[dev_index]);
     return FALSE;
   }
 
@@ -1022,19 +1022,19 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
 }
 
 static void
-close_device (GstVspFilter * space, gint fd, gint index)
+close_device (GstVspFilter * space, gint fd, gint dev_index)
 {
   GST_DEBUG_OBJECT (space, "closing the device ...");
 
   if (-1 == close (fd)) {
     GST_ERROR_OBJECT (space, "close for %s failed",
-        space->vsp_info->dev_name[index]);
+        space->vsp_info->dev_name[dev_index]);
     return;
   }
 }
 
 static void
-stop_capturing (GstVspFilter * space, int fd, int index,
+stop_capturing (GstVspFilter * space, int fd, int dev_index,
     enum v4l2_buf_type buftype)
 {
   GstVspFilterVspInfo *vsp_info;
@@ -1045,7 +1045,7 @@ stop_capturing (GstVspFilter * space, int fd, int index,
 
   if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &buftype)) {
     GST_ERROR_OBJECT (space, "VIDIOC_STREAMOFF for %s failed",
-        vsp_info->dev_name[index]);
+        vsp_info->dev_name[dev_index]);
     return;
   }
 }
@@ -1068,7 +1068,7 @@ gst_vsp_filter_finalize (GObject * obj)
 }
 
 static gboolean
-init_device (GstVspFilter * space, gint fd, gint index, guint captype,
+init_device (GstVspFilter * space, gint fd, gint dev_index, guint captype,
     enum v4l2_buf_type buftype)
 {
   GstVspFilterVspInfo *vsp_info;
@@ -1078,14 +1078,14 @@ init_device (GstVspFilter * space, gint fd, gint index, guint captype,
 
   vsp_info = space->vsp_info;
 
-  if (vsp_info->already_device_initialized[index]) {
+  if (vsp_info->already_device_initialized[dev_index]) {
     GST_WARNING_OBJECT (space, "The device is already initialized");
     return FALSE;
   }
 
   if (-1 == xioctl (fd, VIDIOC_QUERYCAP, &cap)) {
     GST_ERROR_OBJECT (space, "VIDIOC_QUERYCAP for %s errno=%d",
-        vsp_info->dev_name[index], errno);
+        vsp_info->dev_name[dev_index], errno);
     return FALSE;
   }
 
@@ -1100,18 +1100,18 @@ init_device (GstVspFilter * space, gint fd, gint index, guint captype,
     return FALSE;
   }
 
-  vsp_info->entity_name[index] = g_strdup(strtok (NULL, " "));
-  if (vsp_info->entity_name[index] == NULL) {
+  vsp_info->entity_name[dev_index] = g_strdup(strtok (NULL, " "));
+  if (vsp_info->entity_name[dev_index] == NULL) {
     GST_ERROR_OBJECT (space, "entity name not found. in %s", cap.card);
     return FALSE;
   }
 
   GST_DEBUG_OBJECT (space, "ENTITY NAME[%d] = %s",
-      index, vsp_info->entity_name[index]);
+      dev_index, vsp_info->entity_name[dev_index]);
 
-  vsp_info->v4lsub_fd[index] = open_v4lsubdev (vsp_info->ip_name,
-      (const char *) vsp_info->entity_name[index], path);
-  if (vsp_info->v4lsub_fd[index] < 0) {
+  vsp_info->v4lsub_fd[dev_index] = open_v4lsubdev (vsp_info->ip_name,
+      (const char *) vsp_info->entity_name[dev_index], path);
+  if (vsp_info->v4lsub_fd[dev_index] < 0) {
     GST_ERROR_OBJECT (space, "Cannot open '%s': %d, %s",
         path, errno, strerror (errno));
     return FALSE;
@@ -1119,17 +1119,17 @@ init_device (GstVspFilter * space, gint fd, gint index, guint captype,
 
   if (!(cap.capabilities & captype)) {
     GST_ERROR_OBJECT (space, "%s is not suitable device (%08x != %08x)",
-        vsp_info->dev_name[index], cap.capabilities, captype);
+        vsp_info->dev_name[dev_index], cap.capabilities, captype);
     return FALSE;
   }
 
   if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
     GST_ERROR_OBJECT (space, "%s does not support streaming i/o",
-        vsp_info->dev_name[index]);
+        vsp_info->dev_name[dev_index]);
     return FALSE;
   }
 
-  vsp_info->already_device_initialized[index] = TRUE;
+  vsp_info->already_device_initialized[dev_index] = TRUE;
 
   GST_DEBUG_OBJECT (space, "Device initialization has suceeded");
 
@@ -1137,7 +1137,7 @@ init_device (GstVspFilter * space, gint fd, gint index, guint captype,
 }
 
 static gint
-open_device (GstVspFilter * space, gint index)
+open_device (GstVspFilter * space, gint dev_index)
 {
   GstVspFilterVspInfo *vsp_info;
   struct stat st;
@@ -1146,7 +1146,7 @@ open_device (GstVspFilter * space, gint index)
 
   vsp_info = space->vsp_info;
 
-  name = vsp_info->dev_name[index];
+  name = vsp_info->dev_name[dev_index];
 
   if (-1 == stat (name, &st)) {
     GST_ERROR_OBJECT (space, "Cannot identify '%s': %d, %s",
@@ -1448,14 +1448,14 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
 }
 
 static inline gint
-get_stride (GstBuffer * buffer, GstVideoInfo * vinfo, gint index)
+get_stride (GstBuffer * buffer, GstVideoInfo * vinfo, gint plane_index)
 {
   GstVideoMeta *meta;
 
   meta = gst_buffer_get_video_meta (buffer);
   return (meta) ?
-      GST_VIDEO_FORMAT_INFO_STRIDE (vinfo->finfo, meta->stride, index) :
-      vinfo->stride[index];
+      GST_VIDEO_FORMAT_INFO_STRIDE (vinfo->finfo, meta->stride, plane_index) :
+      vinfo->stride[plane_index];
 }
 
 static void
@@ -1490,7 +1490,7 @@ static GstFlowReturn
 gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
     GstVspfilterIOMode io_mode, GstBuffer * buffer,
     GstMemory * gmem[GST_VIDEO_MAX_PLANES], gint n_mem, GstBufferPool * pool,
-    GstVideoInfo * vinfo, GstVspFilterFrameInfo * vframe_info, guint * index)
+    GstVideoInfo * vinfo, GstVspFilterFrameInfo * vframe_info, guint * buf_index)
 {
   GstBuffer *mmap_buf;
   GstVideoFrame frame;
@@ -1505,12 +1505,12 @@ gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
       if (_index != VSPFILTER_INDEX_INVALID && buffer->pool == pool) {
         /* This buffer is from our MMAP buffer pool. */
         vframe_info->io = V4L2_MEMORY_MMAP;
-        *index = _index;
+        *buf_index = _index;
       } else if (gst_is_dmabuf_memory (gmem[0])) {
         vframe_info->io = V4L2_MEMORY_DMABUF;
         for (i = 0; i < n_mem; i++)
           vframe_info->vframe.dmafd[i] = gst_dmabuf_memory_get_fd (gmem[i]);
-        *index = 0;
+        *buf_index = 0;
       } else {
         /* Only input buffers can pass this route. */
         GST_LOG_OBJECT (space, "Copy buffer %p to MMAP memory", buffer);
@@ -1537,7 +1537,7 @@ gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
         gst_video_frame_unmap (&frame);
 
         vframe_info->io = V4L2_MEMORY_MMAP;
-        *index = vspfilter_buffer_pool_get_buffer_index (mmap_buf);
+        *buf_index = vspfilter_buffer_pool_get_buffer_index (mmap_buf);
       }
       break;
     case GST_VSPFILTER_IO_USERPTR:
@@ -1546,7 +1546,7 @@ gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
         goto invalid_buffer;
 
       vframe_info->io = V4L2_MEMORY_USERPTR;
-      *index = 0;
+      *buf_index = 0;
       break;
     default:
       g_assert_not_reached ();
@@ -2000,7 +2000,7 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
 }
 
 static gint
-queue_buffer (GstVspFilter * space, int fd, int index,
+queue_buffer (GstVspFilter * space, int fd, int dev_index,
     enum v4l2_buf_type buftype, struct v4l2_plane *planes,
     enum v4l2_memory io[MAX_DEVICES], guint buf_index)
 {
@@ -2012,10 +2012,10 @@ queue_buffer (GstVspFilter * space, int fd, int index,
   CLEAR (buf);
 
   buf.type = buftype;
-  buf.memory = io[index];
+  buf.memory = io[dev_index];
   buf.index = buf_index;
   buf.m.planes = planes;
-  buf.length = vsp_info->n_planes[index];
+  buf.length = vsp_info->n_planes[dev_index];
 
   if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)) {
     GST_ERROR_OBJECT (space,
@@ -2027,7 +2027,7 @@ queue_buffer (GstVspFilter * space, int fd, int index,
 }
 
 static gint
-dequeue_buffer (GstVspFilter * space, int fd, int index,
+dequeue_buffer (GstVspFilter * space, int fd, int dev_index,
     enum v4l2_buf_type buftype, struct v4l2_plane *planes,
     enum v4l2_memory io[MAX_DEVICES])
 {
@@ -2039,9 +2039,9 @@ dequeue_buffer (GstVspFilter * space, int fd, int index,
   CLEAR (buf);
 
   buf.type = buftype;
-  buf.memory = io[index];
+  buf.memory = io[dev_index];
   buf.m.planes = planes;
-  buf.length = vsp_info->n_planes[index];
+  buf.length = vsp_info->n_planes[dev_index];
 
   if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
     GST_ERROR_OBJECT (space, "VIDIOC_DQBUF for %s failed",
@@ -2053,11 +2053,11 @@ dequeue_buffer (GstVspFilter * space, int fd, int index,
 }
 
 static gboolean
-start_capturing (GstVspFilter * space, int fd, int index,
+start_capturing (GstVspFilter * space, int fd, int dev_index,
     enum v4l2_buf_type buftype)
 {
   if (-1 == xioctl (fd, VIDIOC_STREAMON, &buftype)) {
-    GST_ERROR_OBJECT (space, "VIDIOC_STREAMON failed index=%d", index);
+    GST_ERROR_OBJECT (space, "VIDIOC_STREAMON failed index=%d", dev_index);
     return FALSE;
   }
 
