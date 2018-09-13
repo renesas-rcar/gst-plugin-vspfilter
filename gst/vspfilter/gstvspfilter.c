@@ -396,9 +396,8 @@ gst_vspfilter_set_colorimetry (GstCaps * caps, GstCaps * caps_intersected)
   for (i = 0; i < n_struct; i++) {
     st_dest = gst_caps_get_structure (caps_intersected, i);
     dest_fmt = gst_structure_get_value (st_dest, "format");
-    if (gst_value_is_subset (src_fmt, dest_fmt)) {
-      gst_structure_set_value (st_dest, "colorimetry", src_cimetry);
-    } else if (gst_value_is_fixed (src_cimetry)) {
+    if (gst_value_is_fixed (src_cimetry) &&
+          !gst_value_is_subset (src_fmt, dest_fmt)) {
       struct colorimetry *color = NULL;
       color = find_colorimetry(src_cimetry);
       if (color)
