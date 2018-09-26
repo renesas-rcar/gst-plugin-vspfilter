@@ -275,7 +275,9 @@ gpointer user_data)
   }
 
   gst_structure_fixate_field_string (structure, "format",
-    gst_value_serialize (&out_format));
+    g_value_get_string (&out_format));
+
+  g_value_unset (&out_format);
 
   return TRUE;
 }
