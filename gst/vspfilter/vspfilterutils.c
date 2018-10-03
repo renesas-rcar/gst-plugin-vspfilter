@@ -71,6 +71,9 @@ init_colorimetry_table ()
   gint i;
   gint n_cimetries = sizeof (colorimetries) / sizeof (colorimetries[0]);
 
+  if (G_IS_VALUE(&colorimetries[0].src_value))
+    return;
+
   for (i = 0; i < n_cimetries; i++) {
     g_value_init (&colorimetries[i].src_value, G_TYPE_STRING);
     g_value_init (&colorimetries[i].dest_value, GST_TYPE_LIST);
