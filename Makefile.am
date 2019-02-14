@@ -1,6 +1,8 @@
 AUTOMAKE_OPTIONS = foreign
 
-SUBDIRS = gst
+SUBDIRS = gst common
+
+ACLOCAL_AMFLAGS = -I m4 -I common/m4
 
 # Extra clean files so that maintainer-clean removes *everything*
 MAINTAINERCLEANFILES = \

@@ -123,5 +123,7 @@ AC_CONFIG_FILES([
     Makefile
     gst/Makefile
     gst/vspfilter/Makefile
+    common/Makefile
+    common/m4/Makefile
 ])
 AC_OUTPUT

@@ -23,6 +23,10 @@ the GStreamer plugin and the V4L2 in order to do zero-copy processing.
 
 How to build
 ------------
+Init common submodule.
+
+$ git submodule init
+$ git submodule update
 
 Run the following scripts.
 Please refer to the output of ./configure --help to see if any options apply
