@@ -107,6 +107,13 @@ AC_MSG_RESULT([$GST_PLUGINS_DIR])
 plugindir="$GST_PLUGINS_DIR"
 AC_SUBST(plugindir)
 
+VISIBILITY_CFLAGS=""
+AS_COMPILER_FLAG([-fvisibility=hidden], [VISIBILITY_CFLAGS="-fvisibility=hidden"])
+AC_SUBST(VISIBILITY_CFLAGS)
+
+GST_CFLAGS="$GST_CFLAGS \$(VISIBILITY_CFLAGS)"
+AC_SUBST(GST_CFLAGS)
+
 dnl GST_ALL_LDFLAGS:
 dnl LDFLAGS really should only contain flags, not libs - they get added before
 dnl whatevertarget_LIBS and -L flags here affect the rest of the linking
@@ -116,7 +123,7 @@ AC_SUBST(GST_ALL_LDFLAGS)
 dnl GST_PLUGIN_LDFLAGS:
 dnl this really should only contain flags, not libs - they get added before
 dnl whatevertarget_LIBS and -L flags here affect the rest of the linking
-GST_PLUGIN_LDFLAGS="-module -avoid-version -export-symbols-regex '^([_]*gst_plugin_desc|gst_.*_get_type)\$\$' $GST_ALL_LDFLAGS"
+GST_PLUGIN_LDFLAGS="-module -avoid-version $GST_ALL_LDFLAGS"
 AC_SUBST(GST_PLUGIN_LDFLAGS)
 
 AC_CONFIG_FILES([
