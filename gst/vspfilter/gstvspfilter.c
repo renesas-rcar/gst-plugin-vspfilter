@@ -863,6 +863,9 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
     else
       in_quant = set_quantization (in_info->colorimetry.range);
 
+    /* Not use our pool */
+    gst_buffer_pool_set_active (space->in_pool, FALSE);
+
     if (!set_format (vsp_info->v4lout_fd, in_buf_width, in_buf_height,
             vsp_info->format[OUT], in_stride,
             V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, io[OUT], in_encoding, in_quant)) {
