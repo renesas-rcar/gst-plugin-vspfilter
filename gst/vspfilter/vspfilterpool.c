@@ -99,7 +99,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
   GstVideoInfo *vinfo;
-  guint max_buffers;
+  guint min, max;
   GstCaps *caps = NULL;
   guint pix_fmt;
   guint n_reqbufs;
@@ -109,8 +109,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   enum v4l2_quantization quant;
   GstStructure *st;
 
-  if (!gst_buffer_pool_config_get_params (config, &caps, NULL, NULL,
-          &max_buffers)) {
+  if (!gst_buffer_pool_config_get_params (config, &caps, NULL, &min, &max)) {
     GST_ERROR_OBJECT (self, "Failed to get config params");
     return FALSE;
   }
@@ -120,10 +119,8 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
     return FALSE;
   }
 
-  if (max_buffers == 0) {
-    GST_ERROR_OBJECT (self, "Do not allow unlimited buffers");
-    return FALSE;
-  }
+  if (max)
+    min = max;
 
   if (!gst_video_info_from_caps (&self->vinfo, caps)) {
     GST_ERROR_OBJECT (self, "Invalid caps");
@@ -177,7 +174,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
     return FALSE;
   }
 
-  self->n_buffers = max_buffers;
+  self->n_buffers = min;
 
   if (!self->allocator)
     self->allocator = gst_dmabuf_allocator_new ();

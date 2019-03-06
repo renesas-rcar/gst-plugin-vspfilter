@@ -1777,7 +1777,7 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   GstVspFilterVspInfo *vsp_info;
   GstBufferPool *pool;
   GstStructure *config;
-  guint min, max, size;
+  guint min, size;
 
   space = GST_VSP_FILTER_CAST (trans);
   vsp_info = space->vsp_info;
@@ -1811,13 +1811,13 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
 
   GST_DEBUG_OBJECT (space, "propose our pool %p", pool);
   config = gst_buffer_pool_get_config (pool);
-  gst_buffer_pool_config_get_params (config, NULL, &size, &min, &max);
+  gst_buffer_pool_config_get_params (config, NULL, &size, &min, NULL);
   gst_structure_free (config);
 
   if (gst_query_get_n_allocation_pools (query) > 0)
-    gst_query_set_nth_allocation_pool (query, 0, pool, size, min, max);
+    gst_query_set_nth_allocation_pool (query, 0, pool, size, min, 0);
   else
-    gst_query_add_allocation_pool (query, pool, size, min, max);
+    gst_query_add_allocation_pool (query, pool, size, min, 0);
 
   gst_object_unref (pool);
 
