@@ -235,6 +235,9 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
      return FALSE;
   }
 
+  g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
+  self->exported = NULL;
+
   return TRUE;
 }
 
@@ -343,7 +346,6 @@ vspfilter_buffer_pool_finalize (GObject * object)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (object);
 
-  g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
   gst_object_unref (self->allocator);
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
