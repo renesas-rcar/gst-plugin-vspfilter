@@ -1743,6 +1743,27 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
       (GstObject *) in_newpool);
   gst_object_unref (in_newpool);
 
+  if (space->out_pool) {
+    guint n_reqbufs = 0;
+
+    gst_buffer_pool_set_active (space->out_pool, FALSE);
+    if (!request_buffers (vsp_info->v4lcap_fd,
+                V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, &n_reqbufs,
+                V4L2_MEMORY_MMAP)) {
+          GST_ERROR_OBJECT (space, "reqbuf for capture failed (count = 0)");
+       return FALSE;
+    }
+  }
+
+  out_newpool = gst_vsp_filter_setup_pool (vsp_info->v4lcap_fd,
+      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, outcaps, out_info.size, 0);
+  if (!out_newpool)
+    goto pool_setup_failed;
+
+  gst_object_replace ((GstObject **) & space->out_pool,
+      (GstObject *) out_newpool);
+  gst_object_unref (out_newpool);
+
   filter->in_info = in_info;
   filter->out_info = out_info;
   GST_BASE_TRANSFORM_CLASS (fclass)->transform_ip_on_passthrough = FALSE;
