@@ -187,9 +187,6 @@ vspfilter_buffer_pool_start (GstBufferPool * bpool)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
 
-  if (self->exported)
-    return TRUE;
-
   if (!request_buffers (self->fd,
           self->buftype, &self->n_buffers, V4L2_MEMORY_MMAP)) {
     GST_ERROR_OBJECT (self, "request_buffers for %s failed.",
@@ -207,9 +204,6 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
   guint n_reqbufs = 0;
-
-  if (!self->exported)
-    return TRUE;
 
   if (-1 == xioctl (self->fd, VIDIOC_STREAMOFF, &self->buftype)) {
     GST_ERROR_OBJECT (self, "streamoff for %s failed",
