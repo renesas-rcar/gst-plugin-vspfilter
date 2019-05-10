@@ -1515,8 +1515,10 @@ gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
         *buf_index = _index;
       } else if (gst_is_dmabuf_memory (gmem[0])) {
         vframe_info->io = V4L2_MEMORY_DMABUF;
-        for (i = 0; i < n_mem; i++)
+        for (i = 0; i < n_mem; i++) {
           vframe_info->vframe.dmafd[i] = gst_dmabuf_memory_get_fd (gmem[i]);
+          vframe_info->offsets[i] = gmem[i]->offset;
+        }
         *buf_index = 0;
       } else {
         /* Only input buffers can pass this route. */
@@ -2135,6 +2137,7 @@ gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
       GST_VIDEO_FORMAT_INFO_H_SUB (in_info->finfo, i), in_height);
     in_planes[i].length = in_stride[i] * plane_height;
     in_planes[i].bytesused = in_planes[i].length;
+    in_planes[i].data_offset = in_vframe_info->offsets[i];
   }
 
   /* set up planes for queuing output buffers */

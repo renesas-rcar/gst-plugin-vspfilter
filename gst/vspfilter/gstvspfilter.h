@@ -125,6 +125,7 @@ union _GstVspFilterFrame {
 struct _GstVspFilterFrameInfo {
   enum v4l2_memory io;
   GstVspFilterFrame vframe;
+  guint offsets[GST_VIDEO_MAX_PLANES];
 };
 
 /**
