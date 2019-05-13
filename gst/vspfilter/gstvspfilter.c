@@ -1517,7 +1517,7 @@ gst_vsp_filter_prepare_video_frame (GstVspFilter * space,
         vframe_info->io = V4L2_MEMORY_DMABUF;
         for (i = 0; i < n_mem; i++) {
           vframe_info->vframe.dmafd[i] = gst_dmabuf_memory_get_fd (gmem[i]);
-          vframe_info->offsets[i] = gmem[i]->offset;
+          vframe_info->offsets[i] += gmem[i]->offset;
         }
         *buf_index = 0;
       } else {
@@ -1596,6 +1596,7 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   gint in_n_mem, out_n_mem;
   guint in_index, out_index;
   gint i;
+  GstVideoMeta *vmeta;
 
   if (G_UNLIKELY (!filter->negotiated))
     goto unknown_format;
@@ -1605,13 +1606,29 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   in_n_mem = gst_buffer_n_memory (inbuf);
   out_n_mem = gst_buffer_n_memory (outbuf);
 
-  for (i = 0; i < in_n_mem; i++)
-    in_gmem[i] = gst_buffer_get_memory (inbuf, i);
-  for (i = 0; i < out_n_mem; i++)
-    out_gmem[i] = gst_buffer_get_memory (outbuf, i);
-
   memset (&in_vframe_info, 0, sizeof (in_vframe_info));
   memset (&out_vframe_info, 0, sizeof (out_vframe_info));
+
+  vmeta = gst_buffer_get_video_meta (inbuf);
+  for (i = 0; i < in_n_mem; i++) {
+    if (vmeta) {
+      guint mem_idx, length;
+      gsize skip;
+
+      if (gst_buffer_find_memory (inbuf, vmeta->offset[i],
+          1, &mem_idx, &length, &skip)) {
+        in_gmem[i] = gst_buffer_get_memory (inbuf, mem_idx);
+        in_vframe_info.offsets[i] = skip;
+      } else {
+        GST_ERROR_OBJECT (space, "can't find memory from input buffer");
+        return GST_FLOW_ERROR;
+      }
+    } else {
+      in_gmem[i] = gst_buffer_get_memory (inbuf, i);
+    }
+  }
+  for (i = 0; i < out_n_mem; i++)
+    out_gmem[i] = gst_buffer_get_memory (outbuf, i);
 
   ret = gst_vsp_filter_prepare_video_frame (space, space->prop_in_mode, inbuf,
       in_gmem, in_n_mem, space->in_pool, &filter->in_info,
