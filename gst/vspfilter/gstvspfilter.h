@@ -52,14 +52,16 @@ G_BEGIN_DECLS
 
 #define N_BUFFERS 1
 
-#define MAX_DEVICES 2
 #define MAX_ENTITIES 4
+#define MAX_PADS 2
 
 #define VSP_CONF_ITEM_INPUT "input-device-name="
 #define VSP_CONF_ITEM_OUTPUT "output-device-name="
 
 #define DEFAULT_PROP_VSP_DEVFILE_INPUT "/dev/video0"
 #define DEFAULT_PROP_VSP_DEVFILE_OUTPUT "/dev/video1"
+
+#define RESIZE_DEVICE_NAME "uds.0"
 
 typedef enum {
   GST_VSPFILTER_AUTO_COLOR_RANGE = V4L2_QUANTIZATION_DEFAULT,
@@ -81,51 +83,53 @@ typedef struct _GstVspFilter GstVspFilter;
 typedef struct _GstVspFilterClass GstVspFilterClass;
 
 typedef struct _GstVspFilterVspInfo GstVspFilterVspInfo;
-typedef struct _GstVspFilterFrameInfo GstVspFilterFrameInfo;
-typedef union _GstVspFilterFrame GstVspFilterFrame;
+typedef struct _GstVspFilterEntityInfo GstVspFilterEntityInfo;
+typedef struct _GstVspFilterDeviceInfo GstVspFilterDeviceInfo;
 
-struct buffer {
-  void *start;
-  size_t length;
+enum {
+  OUT_DEV,
+  CAP_DEV,
+  MAX_DEVICES
 };
 
 enum {
-  OUT = 0,
-  CAP = 1,
-  RESZ = 2
+  SINK,
+  SRC
+};
+
+struct _GstVspFilterEntityInfo {
+  gchar *name;
+  gint fd;
+  struct media_entity_desc entity;
+  enum v4l2_mbus_pixelcode code[MAX_PADS];
 };
 
 struct _GstVspFilterVspInfo {
-  gchar *dev_name[MAX_DEVICES];
-  gboolean prop_dev_name[MAX_DEVICES];
-  gint v4lout_fd;
-  gint v4lcap_fd;
   gchar *ip_name;
-  gchar *entity_name[MAX_DEVICES];
   gint media_fd;
-  gint v4lsub_fd[MAX_DEVICES];
-  gint resz_subdev_fd;
-  guint format[MAX_DEVICES];
-  enum v4l2_mbus_pixelcode code[MAX_DEVICES];
-  guint n_planes[MAX_DEVICES];
-  guint  n_buffers[MAX_DEVICES];
-  struct buffer buffers[MAX_DEVICES][N_BUFFERS][VIDEO_MAX_PLANES];
-  struct media_entity_desc entity[MAX_ENTITIES];
   gboolean is_stream_started;
-  gboolean already_device_initialized[MAX_DEVICES];
-  gboolean already_setup_info;
-  guint16 plane_stride[MAX_DEVICES][VIDEO_MAX_PLANES];
+  gboolean is_resz_device_initialized;
+  GstVspFilterEntityInfo resz_ventity;
 };
 
-union _GstVspFilterFrame {
-  GstVideoFrame frame;
-  gint dmafd[GST_VIDEO_MAX_PLANES];
-};
+struct _GstVspFilterDeviceInfo {
+  gchar *name;
+  gboolean prop_name;
+  gint fd;
 
-struct _GstVspFilterFrameInfo {
+  guint format;
+  guint n_planes;
+  guint captype;
+  enum v4l2_buf_type buftype;
   enum v4l2_memory io;
-  GstVspFilterFrame vframe;
-  guint offsets[GST_VIDEO_MAX_PLANES];
+  guint strides[GST_VIDEO_MAX_PLANES];
+
+  GstBufferPool *pool;
+  GstVspfilterIOMode io_mode;
+
+  GstVspFilterEntityInfo ventity;
+
+  gboolean is_input_device;
 };
 
 /**
@@ -137,11 +141,9 @@ struct _GstVspFilter {
   GstVideoFilter element;
 
   GstVspFilterVspInfo *vsp_info;
-  GstBufferPool *in_pool;
-  GstBufferPool *out_pool;
-  GstVspfilterIOMode prop_in_mode;
-  GstVspfilterIOMode prop_out_mode;
+  GstVspFilterDeviceInfo devices[MAX_DEVICES];
   GstVspfilterColorRange input_color_range;
+  GHashTable *hash_t;
 };
 
 struct _GstVspFilterClass

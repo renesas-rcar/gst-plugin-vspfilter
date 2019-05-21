@@ -68,6 +68,35 @@ G_DEFINE_TYPE (VspfilterBufferPool, vspfilter_buffer_pool,
 #define GST_TYPE_VSPFILTER_BUFFER_POOL      (vspfilter_buffer_pool_get_type())
 #define VSPFILTER_BUFFER_POOL_CAST(obj)          ((VspfilterBufferPool*)(obj))
 
+gboolean
+setup_format (GstBufferPool * bpool, guint pix_fmt,
+    enum v4l2_memory io, GstVideoInfo * vinfo,
+    gint stride[GST_VIDEO_MAX_PLANES], enum v4l2_quantization quant)
+{
+  VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
+  enum v4l2_ycbcr_encoding encoding;
+  guint width, height;
+
+  if (self->buftype == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+    width = round_up_width (vinfo->finfo, vinfo->width);
+    height = round_up_height (vinfo->finfo, vinfo->height);
+  } else {
+    width = vinfo->width;
+    height = vinfo->height;
+  }
+
+  encoding = set_encoding (vinfo->colorimetry.matrix);
+
+  if (!set_format (self->fd, width, height, pix_fmt, stride,
+          self->buftype, io, encoding, quant)) {
+    GST_ERROR_OBJECT (self, "set_format for %s failed (%dx%d)",
+        buftype_str (self->buftype), width, height);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 GstBufferPool *
 vspfilter_buffer_pool_new (gint fd, enum v4l2_buf_type buftype)
 {
@@ -156,21 +185,10 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
 
   memset (self->stride, 0, sizeof (self->stride));
 
-  if (self->buftype == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-    width = round_up_width (vinfo->finfo, vinfo->width);
-    height = round_up_height (vinfo->finfo, vinfo->height);
-  } else {
-    width = vinfo->width;
-    height = vinfo->height;
-  }
-
-  encoding = set_encoding (vinfo->colorimetry.matrix);
-  quant = set_quantization (vinfo->colorimetry.range);
-
-  if (!set_format (self->fd, width, height, pix_fmt,
-          self->stride, self->buftype, V4L2_MEMORY_MMAP, encoding, quant)) {
-    GST_ERROR_OBJECT (self, "set_format for %s failed (%dx%d)",
-        buftype_str (self->buftype), vinfo->width, vinfo->height);
+  if (!setup_format (bpool, pix_fmt, V4L2_MEMORY_MMAP, vinfo,
+      self->stride, set_quantization (vinfo->colorimetry.range))) {
+    GST_ERROR_OBJECT (self, "Failed to setup device for %s",
+        buftype_str (self->buftype));
     return FALSE;
   }
 
