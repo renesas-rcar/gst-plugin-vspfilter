@@ -1685,8 +1685,10 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 
       set_v4l2_input_plane (vinfo, planes, dev->n_planes, dev->strides);
       if (vmeta &&
-          !get_offset_from_meta (space, buf, vmeta, planes))
-        return GST_FLOW_ERROR;
+          !get_offset_from_meta (space, buf, vmeta, planes)) {
+        ret = GST_FLOW_ERROR;
+        goto transform_exit;
+      }
     } else if (dev->io_mode == GST_VSPFILTER_IO_USERPTR) {
       gint j;
 
