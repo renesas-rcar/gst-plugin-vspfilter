@@ -826,6 +826,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   guint in_sink_width, in_sink_height;
   guint in_src_width, in_src_height;
   GstVspFilterEntityInfo *out_ent, *cap_ent;
+  struct v4l2_format fmt;
 
   vsp_info = space->vsp_info;
 
@@ -839,9 +840,20 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   out_ent = &space->devices[OUT_DEV].ventity;
   cap_ent = &space->devices[CAP_DEV].ventity;
 
+  CLEAR (fmt);
+
+  fmt.type = space->devices[OUT_DEV].buftype;
+
+  if (-1 == xioctl (space->devices[OUT_DEV].fd, VIDIOC_G_FMT, &fmt)) {
+    GST_ERROR ("VIDIOC_G_FMT for %s failed.",
+        buftype_str (space->devices[OUT_DEV].buftype));
+    return FALSE;
+  }
+
+  in_sink_width = fmt.fmt.pix_mp.width;
+  in_sink_height = fmt.fmt.pix_mp.height;
+
   /*in case odd size of yuv buffer, separate buffer and image size*/
-  in_sink_width = round_up_width (in_finfo, in_width);
-  in_sink_height = round_up_height (in_finfo, in_height);
   in_src_width = round_down_width (in_finfo, in_width);
   in_src_height = round_down_height (in_finfo, in_height);
 
@@ -1425,20 +1437,6 @@ invalid_buffer:
   }
 }
 
-static gboolean
-start_transform (GstVspFilter * space,
-    GstVspFilterDeviceInfo * device, struct v4l2_buffer *v4l2_buf)
-{
-  if (queue_buffer (space, device, v4l2_buf))
-    return FALSE;
-
-  if (!space->vsp_info->is_stream_started &&
-      !start_capturing (space, device))
-    return FALSE;
-
-  return TRUE;
-}
-
 static GstFlowReturn
 prepare_transform_device_copy (GstVspFilter * space, GstBuffer * src,
     GstBufferPool * pool, GstVideoInfo * vinfo, GstBuffer ** dst,
@@ -1599,8 +1597,8 @@ start_transform_device (GstVspFilter *space, GstBufferPool * pool,
 {
   set_v4l2_buf (v4l2_buf, device);
 
-  if (!start_transform (space, device, v4l2_buf)) {
-    GST_ERROR_OBJECT (space, "Failed to start transform for %s",
+  if (queue_buffer (space, device, v4l2_buf)) {
+    GST_ERROR_OBJECT (space, "Failed to queue_buffer for %s",
         device->name);
     return FALSE;
   }
@@ -1704,6 +1702,17 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 
     if (dest_frame.buffer)
       gst_video_frame_unmap (&dest_frame);
+  }
+
+  if (!space->vsp_info->is_stream_started) {
+    if (!set_vsp_entities (space, vinfos[OUT_DEV], vinfos[CAP_DEV])) {
+      GST_ERROR_OBJECT (space, "set_vsp_entities failed");
+      ret = GST_FLOW_ERROR;
+      goto transform_exit;
+    }
+    for (i = 0; i < MAX_DEVICES; i++)
+      if (!start_capturing (space, &space->devices[i]))
+        return FALSE;
   }
 
   space->vsp_info->is_stream_started = TRUE;
@@ -1832,11 +1841,6 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     vsp_info->is_stream_started = FALSE;
 
   decide_pixelcode (space->devices, code);
-
-  if (!set_vsp_entities (space, &vinfo[OUT_DEV], &vinfo[CAP_DEV])) {
-    GST_ERROR_OBJECT (space, "set_vsp_entities failed");
-    return FALSE;
-  }
 
   filter->in_info = vinfo[OUT_DEV];
   filter->out_info = vinfo[CAP_DEV];
