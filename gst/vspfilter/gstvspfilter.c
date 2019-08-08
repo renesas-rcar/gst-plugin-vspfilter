@@ -1595,8 +1595,7 @@ wait_output_ready (GstVspFilter * space)
 
 static gboolean
 start_transform_device (GstVspFilter *space, GstBufferPool * pool,
-    GstVideoInfo * vinfo, GstVspFilterDeviceInfo * device,
-    struct v4l2_buffer * v4l2_buf)
+    GstVspFilterDeviceInfo * device, struct v4l2_buffer * v4l2_buf)
 {
   set_v4l2_buf (v4l2_buf, device);
 
@@ -1695,7 +1694,7 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
         planes[j].length = dest_frame.map[j].maxsize;
     }
 
-    if (!start_transform_device (space, pool, vinfo, dev, &v4l2_buf)) {
+    if (!start_transform_device (space, pool, dev, &v4l2_buf)) {
       GST_ERROR_OBJECT (space, "start_transform_device for %s failed",
           dev->name);
       goto transform_exit;
