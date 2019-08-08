@@ -227,9 +227,9 @@ request_buffers (gint fd, enum v4l2_buf_type buftype, guint * n_bufs,
 
 gboolean
 set_format (gint fd, guint width, guint height, guint format,
-    gint stride[GST_VIDEO_MAX_PLANES], enum v4l2_buf_type buftype,
-    enum v4l2_memory io, enum v4l2_ycbcr_encoding encoding,
-    enum v4l2_quantization quant)
+    gint stride[GST_VIDEO_MAX_PLANES], gint size[GST_VIDEO_MAX_PLANES],
+    enum v4l2_buf_type buftype, enum v4l2_memory io,
+    enum v4l2_ycbcr_encoding encoding, enum v4l2_quantization quant)
 {
   struct v4l2_format fmt;
   gint i;
@@ -279,11 +279,17 @@ set_format (gint fd, guint width, guint height, guint format,
 
   if (stride) {
     for (i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
-      GST_DEBUG ("plane_fmt[%d].sizeimage = %d",
-          i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
       GST_DEBUG ("plane_fmt[%d].bytesperline = %d",
           i, fmt.fmt.pix_mp.plane_fmt[i].bytesperline);
       stride[i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
+    }
+  }
+
+  if (size) {
+    for (i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
+      GST_DEBUG ("plane_fmt[%d].sizeimage = %d",
+          i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
+      size[i] = fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
     }
   }
 

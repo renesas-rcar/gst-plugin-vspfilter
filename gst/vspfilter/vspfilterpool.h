@@ -30,6 +30,6 @@ GstBufferPool * vspfilter_buffer_pool_new (gint fd, enum v4l2_buf_type buftype);
 guint vspfilter_buffer_pool_get_buffer_index (GstBuffer *buffer);
 gboolean setup_format (GstBufferPool * bpool, guint pix_fmt,
     enum v4l2_memory io, GstVideoInfo * vinfo, gint stride[GST_VIDEO_MAX_PLANES],
-    enum v4l2_quantization quant);
+    gint size[GST_VIDEO_MAX_PLANES], enum v4l2_quantization quant);
 
 #endif /*__GST_VSPFILTER_BUFFER_POOL__*/

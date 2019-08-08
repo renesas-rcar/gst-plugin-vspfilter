@@ -47,6 +47,7 @@ struct _VspfilterBufferPool
   guint n_planes;
   guint n_buffers;
   gint stride[GST_VIDEO_MAX_PLANES];
+  gint size[GST_VIDEO_MAX_PLANES];
   gboolean *exported;
 };
 
@@ -71,7 +72,8 @@ G_DEFINE_TYPE (VspfilterBufferPool, vspfilter_buffer_pool,
 gboolean
 setup_format (GstBufferPool * bpool, guint pix_fmt,
     enum v4l2_memory io, GstVideoInfo * vinfo,
-    gint stride[GST_VIDEO_MAX_PLANES], enum v4l2_quantization quant)
+    gint stride[GST_VIDEO_MAX_PLANES], gint size[GST_VIDEO_MAX_PLANES],
+    enum v4l2_quantization quant)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
   enum v4l2_ycbcr_encoding encoding;
@@ -87,7 +89,7 @@ setup_format (GstBufferPool * bpool, guint pix_fmt,
 
   encoding = set_encoding (vinfo->colorimetry.matrix);
 
-  if (!set_format (self->fd, width, height, pix_fmt, stride,
+  if (!set_format (self->fd, width, height, pix_fmt, stride, size,
           self->buftype, io, encoding, quant)) {
     GST_ERROR_OBJECT (self, "set_format for %s failed (%dx%d)",
         buftype_str (self->buftype), width, height);
@@ -137,6 +139,8 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   enum v4l2_ycbcr_encoding encoding;
   enum v4l2_quantization quant;
   GstStructure *st;
+  gint i;
+  guint bufsize = 0;
 
   if (!gst_buffer_pool_config_get_params (config, &caps, NULL, &min, &max)) {
     GST_ERROR_OBJECT (self, "Failed to get config params");
@@ -186,7 +190,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   memset (self->stride, 0, sizeof (self->stride));
 
   if (!setup_format (bpool, pix_fmt, V4L2_MEMORY_MMAP, vinfo,
-      self->stride, set_quantization (vinfo->colorimetry.range))) {
+      self->stride, self->size, set_quantization (vinfo->colorimetry.range))) {
     GST_ERROR_OBJECT (self, "Failed to setup device for %s",
         buftype_str (self->buftype));
     return FALSE;
@@ -196,6 +200,11 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
 
   if (!self->allocator)
     self->allocator = gst_dmabuf_allocator_new ();
+
+  for (i = 0; i < self->n_planes; i++)
+    bufsize += self->size[i];
+
+  gst_buffer_pool_config_set_params (config, caps, bufsize, min, max);
 
   return GST_BUFFER_POOL_CLASS (parent_class)->set_config (bpool, config);
 }
@@ -304,13 +313,12 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
       return GST_FLOW_ERROR;
     }
 
-    size = self->stride[i] * GST_VIDEO_INFO_COMP_HEIGHT (&self->vinfo, i);
-
     gst_buffer_append_memory (vf_buffer->buffer,
-        gst_dmabuf_allocator_alloc (self->allocator, expbuf.fd, size));
+        gst_dmabuf_allocator_alloc (self->allocator, expbuf.fd,
+        self->size[i]));
 
     offset[i] = total;
-    total += size;
+    total += self->size[i];
   }
 
   gst_buffer_add_video_meta_full (vf_buffer->buffer, GST_VIDEO_FRAME_FLAG_NONE,

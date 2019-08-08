@@ -1489,7 +1489,7 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
   else
     quant = set_quantization (vinfo->colorimetry.range);
 
-  if (!setup_format (pool, device->format, io, vinfo, stride, quant)) {
+  if (!setup_format (pool, device->format, io, vinfo, stride, NULL, quant)) {
     GST_ERROR_OBJECT (space, "Failed to setup device for %s",
         device->name);
     return FALSE;

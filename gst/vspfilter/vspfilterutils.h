@@ -56,9 +56,9 @@ gint set_colorspace (GstVideoFormat vid_fmt, guint * fourcc,
     enum v4l2_mbus_pixelcode * code, guint * n_planes);
 gint xioctl (gint fd, gint request, void * arg);
 gboolean set_format (gint fd, guint width, guint height, guint format,
-    gint stride[GST_VIDEO_MAX_PLANES], enum v4l2_buf_type buftype,
-    enum v4l2_memory io, enum v4l2_ycbcr_encoding encoding,
-    enum v4l2_quantization quant);
+    gint stride[GST_VIDEO_MAX_PLANES], gint size[GST_VIDEO_MAX_PLANES],
+    enum v4l2_buf_type buftype, enum v4l2_memory io,
+    enum v4l2_ycbcr_encoding encoding, enum v4l2_quantization quant);
 gboolean request_buffers (gint fd, enum v4l2_buf_type buftype, guint * n_bufs,
     enum v4l2_memory io);
 
