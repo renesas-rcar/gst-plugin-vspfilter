@@ -1378,8 +1378,10 @@ set_v4l2_input_plane_dmabuf (GstVideoInfo * vinfo, struct v4l2_plane *planes,
   guint height;
   gint i;
 
+  /* When import dmabuf, device size setting can be rounded down */
+  height = round_down_height (vinfo->finfo, vinfo->height);
+
   /* set up planes for queuing input buffers */
-  height = round_up_height (vinfo->finfo, vinfo->height);
   for (i = 0; i < n_planes; i++) {
     guint plane_height;
 
@@ -1491,6 +1493,7 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
 {
   enum v4l2_quantization quant;
   guint n_bufs = N_BUFFERS;
+  guint width, height;
 
   if (device->is_input_device &&
       space->input_color_range != GST_VSPFILTER_DEFAULT_COLOR_RANGE)
@@ -1498,9 +1501,20 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
   else
     quant = set_quantization (vinfo->colorimetry.range);
 
-  if (!setup_format (pool, device->format, io, vinfo, stride, NULL, quant)) {
-    GST_ERROR_OBJECT (space, "Failed to setup device for %s",
-        device->name);
+  /* When import external buffer, device size setting can be rounded down */
+  if (device->is_input_device) {
+    width = round_down_width (vinfo->finfo, vinfo->width);
+    height = round_down_height (vinfo->finfo, vinfo->height);
+  } else {
+    width = vinfo->width;
+    height = vinfo->height;
+  }
+
+  if (!set_format (device->fd, width, height, device->format, stride, NULL,
+      device->buftype, io, set_encoding (vinfo->colorimetry.matrix),
+      quant)) {
+    GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
+        buftype_str (device->buftype), width, height);
     return FALSE;
   }
 
