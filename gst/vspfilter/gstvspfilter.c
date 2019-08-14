@@ -1515,9 +1515,6 @@ prepare_transform_device_userptr (GstVspFilter * space,
     return GST_FLOW_ERROR;
   }
 
-  for (i = 0; i < n_planes; i++)
-    v4l2_buf->m.planes[i].m.userptr = (unsigned long) dest_frame->data[i];
-
   v4l2_buf->memory = V4L2_MEMORY_USERPTR;
 
   return GST_FLOW_OK;
@@ -1625,6 +1622,23 @@ init_transform_device (GstVspFilter *space, GstVspFilterDeviceInfo *dev,
   return TRUE;
 }
 
+static void
+setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
+    guint n_planes, struct v4l2_plane * planes)
+{
+  gint i;
+
+  for (i = 0; i < n_planes; i++) {
+    GstMemory *mem;
+    struct v4l2_plane *plane = &planes[i];
+
+    mem = gst_buffer_get_memory (buf, i);
+
+    plane->m.userptr = (unsigned long) dest_frame->data[i];
+    plane->length = plane->bytesused = dest_frame->map[i].maxsize;
+  }
+}
+
 static GstFlowReturn
 gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     GstBuffer * outbuf)
@@ -1678,20 +1692,22 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
             v4l2_buf.memory, pool))
        goto transform_exit;
 
-    if (dev->is_input_device) {
-      GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
+    switch (dev->io) {
+      case V4L2_MEMORY_USERPTR:
+        setup_v4l2_plane_userptr (buf, &dest_frame, dev->n_planes, planes);
+        break;
+      default:
+        if (dev->is_input_device) {
+          GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
 
-      set_v4l2_input_plane (vinfo, planes, dev->n_planes, dev->strides);
-      if (vmeta &&
-          !get_offset_from_meta (space, buf, vmeta, planes)) {
-        ret = GST_FLOW_ERROR;
-        goto transform_exit;
-      }
-    } else if (dev->io_mode == GST_VSPFILTER_IO_USERPTR) {
-      gint j;
-
-      for (j = 0; j < dev->n_planes; j++)
-        planes[j].length = dest_frame.map[j].maxsize;
+          set_v4l2_input_plane (vinfo, planes, dev->n_planes, dev->strides);
+          if (vmeta &&
+              !get_offset_from_meta (space, buf, vmeta, planes)) {
+            ret = GST_FLOW_ERROR;
+            goto transform_exit;
+          }
+        }
+        break;
     }
 
     if (!start_transform_device (space, pool, dev, &v4l2_buf)) {
