@@ -1634,8 +1634,9 @@ setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
 
     mem = gst_buffer_get_memory (buf, i);
 
-    plane->m.userptr = (unsigned long) dest_frame->data[i];
-    plane->length = plane->bytesused = dest_frame->map[i].maxsize;
+    plane->m.userptr = (unsigned long) dest_frame->data[i] - mem->offset;
+    plane->length = plane->bytesused = dest_frame->map[i].maxsize + mem->offset;
+    plane->data_offset = mem->offset;
   }
 }
 
