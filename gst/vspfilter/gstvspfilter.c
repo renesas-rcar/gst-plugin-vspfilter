@@ -1361,7 +1361,18 @@ set_v4l2_buf_mmap (struct v4l2_buffer *v4l2_buf, GstBuffer * buffer)
 }
 
 static void
-set_v4l2_input_plane (GstVideoInfo * vinfo, struct v4l2_plane *planes,
+set_v4l2_input_plane_mmap (GstBuffer * buffer, guint n_planes,
+    struct v4l2_plane *planes)
+{
+  gint i;
+  gint *size = vspfilter_buffer_pool_get_size (buffer->pool);
+
+  for (i = 0; i < n_planes; i++)
+    planes[i].length = planes[i].bytesused = size[i];
+}
+
+static void
+set_v4l2_input_plane_dmabuf (GstVideoInfo * vinfo, struct v4l2_plane *planes,
     guint n_planes, guint * strides)
 {
   guint height;
@@ -1697,18 +1708,23 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
       case V4L2_MEMORY_USERPTR:
         setup_v4l2_plane_userptr (buf, &dest_frame, dev->n_planes, planes);
         break;
-      default:
-        if (dev->is_input_device) {
-          GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
-
-          set_v4l2_input_plane (vinfo, planes, dev->n_planes, dev->strides);
-          if (vmeta &&
-              !get_offset_from_meta (space, buf, vmeta, planes)) {
-            ret = GST_FLOW_ERROR;
-            goto transform_exit;
-          }
-        }
+      case V4L2_MEMORY_MMAP:
+        if (dev->is_input_device)
+          set_v4l2_input_plane_mmap (buf, dev->n_planes, planes);
         break;
+      case V4L2_MEMORY_DMABUF:
+        if (dev->is_input_device)
+          set_v4l2_input_plane_dmabuf (vinfo, planes, dev->n_planes,
+              dev->strides);
+        break;
+    }
+    if (dev->io != V4L2_MEMORY_USERPTR) {
+      GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
+
+      if (vmeta && !get_offset_from_meta (space, buf, vmeta, planes)) {
+        ret = GST_FLOW_ERROR;
+        goto transform_exit;
+      }
     }
 
     if (!start_transform_device (space, pool, dev, &v4l2_buf)) {

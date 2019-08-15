@@ -69,6 +69,14 @@ G_DEFINE_TYPE (VspfilterBufferPool, vspfilter_buffer_pool,
 #define GST_TYPE_VSPFILTER_BUFFER_POOL      (vspfilter_buffer_pool_get_type())
 #define VSPFILTER_BUFFER_POOL_CAST(obj)          ((VspfilterBufferPool*)(obj))
 
+gint *
+vspfilter_buffer_pool_get_size (GstBufferPool * bpool)
+{
+  VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
+
+  return self->size;
+}
+
 gboolean
 setup_format (GstBufferPool * bpool, guint pix_fmt,
     enum v4l2_memory io, GstVideoInfo * vinfo,
