@@ -42,28 +42,22 @@
 #include <linux/v4l2-mediabus.h>
 
 G_BEGIN_DECLS
-
 #define GST_TYPE_VSP_FILTER	          (gst_vsp_filter_get_type())
 #define GST_VSP_FILTER(obj)               (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VSP_FILTER,GstVspFilter))
 #define GST_VSP_FILTER_CLASS(klass)       (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VSP_FILTER,GstVspFilterClass))
 #define GST_IS_VIDEO_CONVERT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VSP_FILTER))
 #define GST_IS_VIDEO_CONVERT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VSP_FILTER))
 #define GST_VSP_FILTER_CAST(obj)       ((GstVspFilter *)(obj))
-
 #define N_BUFFERS 1
-
 #define MAX_ENTITIES 4
 #define MAX_PADS 2
-
 #define VSP_CONF_ITEM_INPUT "input-device-name="
 #define VSP_CONF_ITEM_OUTPUT "output-device-name="
-
 #define DEFAULT_PROP_VSP_DEVFILE_INPUT "/dev/video0"
 #define DEFAULT_PROP_VSP_DEVFILE_OUTPUT "/dev/video1"
-
 #define RESIZE_DEVICE_NAME "uds.0"
-
-typedef enum {
+    typedef enum
+{
   GST_VSPFILTER_AUTO_COLOR_RANGE = V4L2_QUANTIZATION_DEFAULT,
   GST_VSPFILTER_FULL_COLOR_RANGE = V4L2_QUANTIZATION_FULL_RANGE,
   GST_VSPFILTER_LIMITED_COLOR_RANGE = V4L2_QUANTIZATION_LIM_RANGE,
@@ -72,8 +66,9 @@ typedef enum {
 
 #define DEFAULT_PROP_COLOR_RANGE GST_VSPFILTER_DEFAULT_COLOR_RANGE
 
-typedef enum {
-  GST_VSPFILTER_IO_AUTO = 0, /* dmabuf or mmap */
+typedef enum
+{
+  GST_VSPFILTER_IO_AUTO = 0,    /* dmabuf or mmap */
   GST_VSPFILTER_IO_USERPTR
 } GstVspfilterIOMode;
 
@@ -86,25 +81,29 @@ typedef struct _GstVspFilterVspInfo GstVspFilterVspInfo;
 typedef struct _GstVspFilterEntityInfo GstVspFilterEntityInfo;
 typedef struct _GstVspFilterDeviceInfo GstVspFilterDeviceInfo;
 
-enum {
+enum
+{
   OUT_DEV,
   CAP_DEV,
   MAX_DEVICES
 };
 
-enum {
+enum
+{
   SINK,
   SRC
 };
 
-struct _GstVspFilterEntityInfo {
+struct _GstVspFilterEntityInfo
+{
   gchar *name;
   gint fd;
   struct media_entity_desc entity;
   enum v4l2_mbus_pixelcode code[MAX_PADS];
 };
 
-struct _GstVspFilterVspInfo {
+struct _GstVspFilterVspInfo
+{
   gchar *ip_name;
   gint media_fd;
   gboolean is_stream_started;
@@ -112,7 +111,8 @@ struct _GstVspFilterVspInfo {
   GstVspFilterEntityInfo resz_ventity;
 };
 
-struct _GstVspFilterDeviceInfo {
+struct _GstVspFilterDeviceInfo
+{
   gchar *name;
   gboolean prop_name;
   gint fd;
@@ -137,7 +137,8 @@ struct _GstVspFilterDeviceInfo {
  *
  * Opaque object data structure.
  */
-struct _GstVspFilter {
+struct _GstVspFilter
+{
   GstVideoFilter element;
 
   GstVspFilterVspInfo *vsp_info;
@@ -152,5 +153,4 @@ struct _GstVspFilterClass
 };
 
 G_END_DECLS
-
 #endif /* __GST_VIDEOCONVERT_H__ */

@@ -98,13 +98,13 @@ static void gst_vsp_filter_get_property (GObject * object,
 
 static GstFlowReturn
 gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
-    struct v4l2_buffer * in_v4l2_buf, struct v4l2_buffer * out_v4l2_buf);
+    struct v4l2_buffer *in_v4l2_buf, struct v4l2_buffer *out_v4l2_buf);
 
-static gboolean gst_vsp_filter_stop (GstBaseTransform *trans);
+static gboolean gst_vsp_filter_stop (GstBaseTransform * trans);
 
 static gint
 queue_buffer (GstVspFilter * space, GstVspFilterDeviceInfo * device,
-    struct v4l2_buffer * buf);
+    struct v4l2_buffer *buf);
 
 static gboolean
 start_capturing (GstVspFilter * space, GstVspFilterDeviceInfo * device);
@@ -119,16 +119,17 @@ gst_vsp_filter_color_range_get_type (void)
 
   static const GEnumValue color_ranges[] = {
     {GST_VSPFILTER_AUTO_COLOR_RANGE,
-      "GST_VSPFILTER_AUTO_COLOR_RANGE", "auto"},
+        "GST_VSPFILTER_AUTO_COLOR_RANGE", "auto"},
     {GST_VSPFILTER_FULL_COLOR_RANGE,
-      "GST_VSPFILTER_FULL_COLOR_RANGE", "full"},
+        "GST_VSPFILTER_FULL_COLOR_RANGE", "full"},
     {GST_VSPFILTER_LIMITED_COLOR_RANGE,
-      "GST_VSPFILTER_LIMITED_COLOR_RANGE", "limited"},
+        "GST_VSPFILTER_LIMITED_COLOR_RANGE", "limited"},
     {GST_VSPFILTER_DEFAULT_COLOR_RANGE,
-      "GST_VSPFILTER_DEFAULT_COLOR_RANGE", "default"},
+        "GST_VSPFILTER_DEFAULT_COLOR_RANGE", "default"},
     {0, NULL, NULL}
   };
-  vspfilter_color_range = g_enum_register_static ("GstVspfilterColorRange", color_ranges);
+  vspfilter_color_range =
+      g_enum_register_static ("GstVspfilterColorRange", color_ranges);
 
   return vspfilter_color_range;
 }
@@ -174,7 +175,8 @@ gst_vsp_filter_is_caps_format_supported_for_vsp (GstVspFilter * space,
     struct v4l2_format v4l2fmt;
 
     fmt =
-        gst_video_format_from_string (gst_structure_get_string (st[i], "format"));
+        gst_video_format_from_string (gst_structure_get_string (st[i],
+            "format"));
     if (fmt == GST_VIDEO_FORMAT_UNKNOWN) {
       GST_ERROR_OBJECT (space, "failed to convert video format");
       return FALSE;
@@ -209,18 +211,18 @@ gst_vsp_filter_is_caps_format_supported_for_vsp (GstVspFilter * space,
 
 static gboolean
 intersect_format (GstCapsFeatures * features, GstStructure * structure,
-gpointer user_data)
+    gpointer user_data)
 {
   const GValue *in_format = user_data;
-  GValue out_format = {0};
+  GValue out_format = { 0 };
 
   if (!gst_value_intersect (&out_format, in_format,
-       gst_structure_get_value (structure, "format"))) {
+          gst_structure_get_value (structure, "format"))) {
     return FALSE;
   }
 
   gst_structure_fixate_field_string (structure, "format",
-    g_value_get_string (&out_format));
+      g_value_get_string (&out_format));
 
   g_value_unset (&out_format);
 
@@ -247,11 +249,11 @@ gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
   othercaps = gst_caps_make_writable (othercaps);
 
   ins = gst_caps_get_structure (caps, 0);
-  in_format = gst_structure_get_value(ins, "format");
+  in_format = gst_structure_get_value (ins, "format");
 
   outcaps = gst_caps_copy (othercaps);
   gst_caps_filter_and_map_in_place (outcaps, intersect_format,
-    (gpointer)in_format);
+      (gpointer) in_format);
 
   if (gst_caps_is_empty (outcaps))
     gst_caps_replace (&outcaps, othercaps);
@@ -290,12 +292,12 @@ gst_vsp_filter_fixate_caps (GstBaseTransform * trans,
     gst_video_info_from_caps (&out_info, result);
     if (!w) {
       gint out_width = MIN (round_down_width (in_info.finfo, from_w),
-        round_down_width (out_info.finfo, from_w));
+          round_down_width (out_info.finfo, from_w));
       gst_caps_set_simple (result, "width", G_TYPE_INT, out_width, NULL);
     }
     if (!h) {
       gint out_height = MIN (round_down_height (in_info.finfo, from_h),
-        round_down_height (out_info.finfo, from_h));
+          round_down_height (out_info.finfo, from_h));
       gst_caps_set_simple (result, "height", G_TYPE_INT, out_height, NULL);
     }
   }
@@ -329,7 +331,7 @@ gst_vspfilter_set_colorimetry (GstCaps * caps, GstCaps * caps_intersected)
 
   n_struct = gst_caps_get_size (caps_intersected);
 
-  if (!GST_CAPS_IS_SIMPLE(caps))
+  if (!GST_CAPS_IS_SIMPLE (caps))
     return;
 
   st_src = gst_caps_get_structure (caps, 0);
@@ -344,9 +346,9 @@ gst_vspfilter_set_colorimetry (GstCaps * caps, GstCaps * caps_intersected)
     st_dest = gst_caps_get_structure (caps_intersected, i);
     dest_fmt = gst_structure_get_value (st_dest, "format");
     if (gst_value_is_fixed (src_cimetry) &&
-          !gst_value_is_subset (src_fmt, dest_fmt)) {
+        !gst_value_is_subset (src_fmt, dest_fmt)) {
       struct colorimetry *color = NULL;
-      color = find_colorimetry(src_cimetry);
+      color = find_colorimetry (src_cimetry);
       if (color)
         gst_structure_set_value (st_dest, "colorimetry", &color->dest_value);
     }
@@ -354,12 +356,11 @@ gst_vspfilter_set_colorimetry (GstCaps * caps, GstCaps * caps_intersected)
 }
 
 static gboolean
-remove_format_info (GstCapsFeatures *features, GstStructure *structure,
+remove_format_info (GstCapsFeatures * features, GstStructure * structure,
     gpointer user_data)
 {
   gst_structure_remove_fields (structure, "format",
-      "colorimetry", "chroma-site", "width",
-      "height", NULL);
+      "colorimetry", "chroma-site", "width", "height", NULL);
 }
 
 /* The caps can be transformed into any other caps with format info removed.
@@ -380,7 +381,7 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
   gst_caps_map_in_place (caps_copy, remove_format_info, NULL);
   caps_copy = gst_caps_simplify (caps_copy);
 
-  /*Src and sink templates are same*/
+  /*Src and sink templates are same */
   template = gst_static_pad_template_get_caps (&gst_vsp_filter_src_template);
 
   caps_intersected = gst_caps_intersect (caps_copy, template);
@@ -448,7 +449,7 @@ open_v4lsubdev (GstVspFilter * space, gchar * prefix, const gchar * target)
   }
 
   GST_ERROR_OBJECT (space, "Cannot open '%s': %d, %s",
-        path, errno, strerror (errno));
+      path, errno, strerror (errno));
 
   return -1;
 }
@@ -488,7 +489,8 @@ open_media_device (GstVspFilter * space)
 
   vsp_info = space->vsp_info;
 
-  str_size = get_symlink_target_name (space->devices[CAP_DEV].name, &link_target);
+  str_size =
+      get_symlink_target_name (space->devices[CAP_DEV].name, &link_target);
 
   dev =
       g_path_get_basename ((link_target) ? link_target :
@@ -532,7 +534,7 @@ get_media_entities (GstVspFilter * space)
     if ((ret < 0) && (errno == EINVAL))
       break;
 
-    ent_d = g_memdup (&entity, sizeof(struct media_entity_desc));
+    ent_d = g_memdup (&entity, sizeof (struct media_entity_desc));
     g_hash_table_insert (space->hash_t, ent_d->name, ent_d);
   }
 }
@@ -712,7 +714,7 @@ set_vsp_entity (GstVspFilter * space, GstVspFilterEntityInfo * ventity,
     gint sink_width, gint sink_height, gint src_width, gint src_height)
 {
   if (!init_entity_pad (space, ventity->fd, SINK, sink_width,
-        sink_height, ventity->code[SINK])) {
+          sink_height, ventity->code[SINK])) {
     GST_ERROR_OBJECT (space, "init_entity_pad for %s failed", ventity->name);
     return FALSE;
   }
@@ -728,15 +730,14 @@ set_vsp_entity (GstVspFilter * space, GstVspFilterEntityInfo * ventity,
 
 static gboolean
 lookup_entity (GstVspFilter * space, gchar * ent_name,
-    struct media_entity_desc * ent)
+    struct media_entity_desc *ent)
 {
   gchar tmp[256];
   struct media_entity_desc *ent_t;
 
   snprintf (tmp, sizeof (tmp), "%s %s", space->vsp_info->ip_name, ent_name);
 
-  ent_t =
-      (struct media_entity_desc *) g_hash_table_lookup (space->hash_t, tmp);
+  ent_t = (struct media_entity_desc *) g_hash_table_lookup (space->hash_t, tmp);
 
   if (!ent_t)
     return FALSE;
@@ -747,7 +748,7 @@ lookup_entity (GstVspFilter * space, gchar * ent_name,
 }
 
 static gboolean
-init_resize_device (GstVspFilter * space, GstVspFilterEntityInfo *resz_ent)
+init_resize_device (GstVspFilter * space, GstVspFilterEntityInfo * resz_ent)
 {
   GstVspFilterVspInfo *vsp_info = space->vsp_info;
 
@@ -756,8 +757,7 @@ init_resize_device (GstVspFilter * space, GstVspFilterEntityInfo *resz_ent)
   resz_ent->code[SINK] = resz_ent->code[SRC]
       = space->devices[CAP_DEV].ventity.code[SINK];
 
-  resz_ent->fd =
-      open_v4lsubdev (space, vsp_info->ip_name, resz_ent->name);
+  resz_ent->fd = open_v4lsubdev (space, vsp_info->ip_name, resz_ent->name);
   if (resz_ent->fd < 0) {
     GST_ERROR_OBJECT (space, "cannot open a subdev file for %s",
         resz_ent->name);
@@ -786,15 +786,15 @@ deinit_resize_device (GstVspFilter * space)
 }
 
 static gboolean
-setup_resize_device (GstVspFilter * space, GstVspFilterEntityInfo *out_ent,
-    GstVspFilterEntityInfo *cap_ent, guint in_src_width, guint in_src_height,
+setup_resize_device (GstVspFilter * space, GstVspFilterEntityInfo * out_ent,
+    GstVspFilterEntityInfo * cap_ent, guint in_src_width, guint in_src_height,
     guint out_width, guint out_height)
 {
   GstVspFilterEntityInfo *resz_ent = &space->vsp_info->resz_ventity;
   gint ret;
 
   if (!space->vsp_info->is_resz_device_initialized &&
-           !init_resize_device (space, resz_ent)) {
+      !init_resize_device (space, resz_ent)) {
     GST_ERROR_OBJECT (space, "Cannot init resize entity");
     return FALSE;
   }
@@ -806,7 +806,7 @@ setup_resize_device (GstVspFilter * space, GstVspFilterEntityInfo *out_ent,
     return FALSE;
 
   if (!set_vsp_entity (space, resz_ent, in_src_width,
-       in_src_height, out_width, out_height)) {
+          in_src_height, out_width, out_height)) {
     GST_ERROR_OBJECT (space, "Failed to set_vsp_entity for %s", resz_ent->name);
     return FALSE;
   }
@@ -815,8 +815,8 @@ setup_resize_device (GstVspFilter * space, GstVspFilterEntityInfo *out_ent,
 }
 
 static gboolean
-set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
-    GstVideoInfo *out_info)
+set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
+    GstVideoInfo * out_info)
 {
   GstVspFilterVspInfo *vsp_info;
   const GstVideoFormatInfo *in_finfo;
@@ -853,24 +853,24 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
   in_sink_width = fmt.fmt.pix_mp.width;
   in_sink_height = fmt.fmt.pix_mp.height;
 
-  /*in case odd size of yuv buffer, separate buffer and image size*/
+  /*in case odd size of yuv buffer, separate buffer and image size */
   in_src_width = round_down_width (in_finfo, in_width);
   in_src_height = round_down_height (in_finfo, in_height);
 
   if (!set_vsp_entity (space, out_ent, in_sink_width,
-       in_sink_height, in_src_width, in_src_height)) {
+          in_sink_height, in_src_width, in_src_height)) {
     GST_ERROR_OBJECT (space, "Failed to set_vsp_entity for %s", out_ent->name);
     return FALSE;
   }
 
   if ((in_sink_width != in_src_width || in_sink_height != in_src_height) &&
-         !set_crop (space, out_ent->fd, &in_src_width, &in_src_height)) {
+      !set_crop (space, out_ent->fd, &in_src_width, &in_src_height)) {
     GST_ERROR_OBJECT (space, "needs crop but set_crop failed");
     return FALSE;
   }
 
   if (!set_vsp_entity (space, cap_ent, out_width,
-       out_height, out_width, out_height)) {
+          out_height, out_width, out_height)) {
     GST_ERROR_OBJECT (space, "Failed to set_vsp_entity for %s", cap_ent->name);
     return FALSE;
   }
@@ -880,8 +880,8 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo *in_info,
 
   /* link up entities for VSP1 V4L2 */
   if ((in_src_width != out_width) || (in_src_height != out_height)) {
-    if (!setup_resize_device (space, out_ent, cap_ent, in_src_width, in_src_height,
-        out_width, out_height))
+    if (!setup_resize_device (space, out_ent, cap_ent, in_src_width,
+            in_src_height, out_width, out_height))
       return FALSE;
   } else {
     if (vsp_info->is_resz_device_initialized)
@@ -904,8 +904,7 @@ stop_capturing (GstVspFilter * space, GstVspFilterDeviceInfo * device)
   GST_DEBUG_OBJECT (space, "stop streaming... ");
 
   if (-1 == xioctl (device->fd, VIDIOC_STREAMOFF, &device->buftype)) {
-    GST_ERROR_OBJECT (space, "VIDIOC_STREAMOFF for %s failed",
-        device->name);
+    GST_ERROR_OBJECT (space, "VIDIOC_STREAMOFF for %s failed", device->name);
     return FALSE;
   }
 
@@ -960,7 +959,7 @@ init_device (GstVspFilter * space, GstVspFilterDeviceInfo * device)
   /* look for a counterpart */
   p = strtok (cap.card, " ");
   if (vsp_info->ip_name == NULL) {
-    vsp_info->ip_name = g_strdup(p);
+    vsp_info->ip_name = g_strdup (p);
     GST_DEBUG_OBJECT (space, "ip_name = %s", vsp_info->ip_name);
   } else if (strcmp (vsp_info->ip_name, p) != 0) {
     GST_ERROR_OBJECT (space, "ip name mismatch vsp_info->ip_name=%s p=%s",
@@ -968,7 +967,7 @@ init_device (GstVspFilter * space, GstVspFilterDeviceInfo * device)
     return FALSE;
   }
 
-  ventity->name = g_strdup(strtok (NULL, " "));
+  ventity->name = g_strdup (strtok (NULL, " "));
   if (ventity->name == NULL) {
     GST_ERROR_OBJECT (space, "entity name not found. in %s", cap.card);
     return FALSE;
@@ -984,8 +983,7 @@ init_device (GstVspFilter * space, GstVspFilterDeviceInfo * device)
   ventity->fd = open_v4lsubdev (space, vsp_info->ip_name,
       (const char *) ventity->name);
   if (ventity->fd < 0) {
-    GST_ERROR_OBJECT (space, "cannot open a subdev file for %s",
-          ventity->name);
+    GST_ERROR_OBJECT (space, "cannot open a subdev file for %s", ventity->name);
     return FALSE;
   }
 
@@ -995,7 +993,7 @@ init_device (GstVspFilter * space, GstVspFilterDeviceInfo * device)
 }
 
 static gint
-open_device (GstVspFilter * space, gchar *dev_name)
+open_device (GstVspFilter * space, gchar * dev_name)
 {
   GstVspFilterVspInfo *vsp_info;
   struct stat st;
@@ -1068,19 +1066,19 @@ gst_vsp_filter_vsp_device_init (GstVspFilter * space)
   } else {
     while (fgets (str, sizeof (str), fp) != NULL) {
       if (strncmp (str, VSP_CONF_ITEM_INPUT,
-          strlen (VSP_CONF_ITEM_INPUT)) == 0 &&
+              strlen (VSP_CONF_ITEM_INPUT)) == 0 &&
           !space->devices[OUT_DEV].prop_name) {
         /* remove line feed code */
         str[strlen (str) - 1] = '\0';
         /* need to free default name */
         g_free (space->devices[OUT_DEV].name);
         space->devices[OUT_DEV].name =
-           g_strdup (str + strlen (VSP_CONF_ITEM_INPUT));
+            g_strdup (str + strlen (VSP_CONF_ITEM_INPUT));
         continue;
       }
 
       if (strncmp (str, VSP_CONF_ITEM_OUTPUT,
-          strlen (VSP_CONF_ITEM_OUTPUT)) == 0
+              strlen (VSP_CONF_ITEM_OUTPUT)) == 0
           && !space->devices[CAP_DEV].prop_name) {
         /* remove line feed code */
         str[strlen (str) - 1] = '\0';
@@ -1192,15 +1190,14 @@ gst_vsp_filter_setup_pool (GstVspFilterDeviceInfo * device, GstCaps * caps,
 {
   GstBufferPool *pool;
   GstStructure *structure;
-  guint buf_cnt = MAX(3, num_buf);
+  guint buf_cnt = MAX (3, num_buf);
 
   pool = vspfilter_buffer_pool_new (device->fd, device->buftype);
 
   structure = gst_buffer_pool_get_config (pool);
   /*We don't support dynamically allocating buffers, so set the max buffer
-    count to be the same as the min buffer count */
-  gst_buffer_pool_config_set_params (structure, caps, size,
-      buf_cnt, buf_cnt);
+     count to be the same as the min buffer count */
+  gst_buffer_pool_config_set_params (structure, caps, size, buf_cnt, buf_cnt);
   if (!gst_buffer_pool_set_config (pool, structure)) {
     gst_object_unref (pool);
     return NULL;
@@ -1261,7 +1258,7 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min, &max);
 
   if (space->devices[CAP_DEV].io_mode == GST_VSPFILTER_IO_AUTO &&
-        !have_dmabuf && !space->devices[CAP_DEV].pool) {
+      !have_dmabuf && !space->devices[CAP_DEV].pool) {
     GstCaps *caps;
     GstVideoInfo vinfo;
 
@@ -1271,10 +1268,9 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
 
     GST_DEBUG_OBJECT (space, "create new pool, min buffers=%d, max buffers=%d",
         min, max);
-    size = MAX(vinfo.size, size);
+    size = MAX (vinfo.size, size);
     space->devices[CAP_DEV].pool =
-        gst_vsp_filter_setup_pool (&space->devices[CAP_DEV],
-        caps, size, min);
+        gst_vsp_filter_setup_pool (&space->devices[CAP_DEV], caps, size, min);
     if (!space->devices[CAP_DEV].pool) {
       GST_ERROR_OBJECT (space, "failed to setup pool");
       return FALSE;
@@ -1282,7 +1278,7 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
   }
 
   if (space->devices[CAP_DEV].pool) {
-    gst_object_replace ((GstObject **) &pool,
+    gst_object_replace ((GstObject **) & pool,
         (GstObject *) space->devices[CAP_DEV].pool);
     GST_DEBUG_OBJECT (space, "use our pool %p", pool);
     config = gst_buffer_pool_get_config (pool);
@@ -1385,8 +1381,9 @@ set_v4l2_input_plane_dmabuf (GstVideoInfo * vinfo, struct v4l2_plane *planes,
   for (i = 0; i < n_planes; i++) {
     guint plane_height;
 
-    plane_height = GST_VIDEO_SUB_SCALE (
-      GST_VIDEO_FORMAT_INFO_H_SUB (vinfo->finfo, i), height);
+    plane_height =
+        GST_VIDEO_SUB_SCALE (GST_VIDEO_FORMAT_INFO_H_SUB (vinfo->finfo, i),
+        height);
 
     planes[i].length = strides[i] * plane_height;
     planes[i].bytesused = planes[i].length;
@@ -1402,7 +1399,7 @@ set_v4l2_buf (struct v4l2_buffer *v4l2_buf, GstVspFilterDeviceInfo * device)
 
 static GstFlowReturn
 copy_frame (GstVspFilter * space, GstBufferPool * pool, GstBuffer * src,
-    GstBuffer ** dst, GstVideoInfo * vinfo, GstVideoFrame *dest_frame)
+    GstBuffer ** dst, GstVideoInfo * vinfo, GstVideoFrame * dest_frame)
 {
   GstFlowReturn ret;
   GstVideoFrame frame;
@@ -1420,8 +1417,7 @@ copy_frame (GstVspFilter * space, GstBufferPool * pool, GstBuffer * src,
 
   if (!gst_video_frame_map (&frame, vinfo, src, GST_MAP_READ))
     goto invalid_buffer;
-  if (!gst_video_frame_map (dest_frame, vinfo, *dst,
-          GST_MAP_WRITE)) {
+  if (!gst_video_frame_map (dest_frame, vinfo, *dst, GST_MAP_WRITE)) {
     gst_video_frame_unmap (&frame);
     goto invalid_buffer;
   }
@@ -1453,7 +1449,7 @@ invalid_buffer:
 static GstFlowReturn
 prepare_transform_device_copy (GstVspFilter * space, GstBuffer * src,
     GstBufferPool * pool, GstVideoInfo * vinfo, GstBuffer ** dst,
-    GstVideoFrame *dest_frame, struct v4l2_buffer *v4l2_buf)
+    GstVideoFrame * dest_frame, struct v4l2_buffer *v4l2_buf)
 {
   GstFlowReturn ret;
   guint strides[VIDEO_MAX_PLANES];
@@ -1488,8 +1484,8 @@ set_v4l2_buf_dmabuf (GstVspFilter * space, GstBuffer * buffer,
 
 static gboolean
 setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
-     GstVspFilterDeviceInfo * device, gint stride[VIDEO_MAX_PLANES],
-     enum v4l2_memory io)
+    GstVspFilterDeviceInfo * device, gint stride[VIDEO_MAX_PLANES],
+    enum v4l2_memory io)
 {
   enum v4l2_quantization quant;
   guint n_bufs = N_BUFFERS;
@@ -1511,8 +1507,8 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
   }
 
   if (!set_format (device->fd, width, height, device->format, stride, NULL,
-      device->buftype, io, set_encoding (vinfo->colorimetry.matrix),
-      quant)) {
+          device->buftype, io, set_encoding (vinfo->colorimetry.matrix),
+          quant)) {
     GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
         buftype_str (device->buftype), width, height);
     return FALSE;
@@ -1529,13 +1525,11 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
 static GstFlowReturn
 prepare_transform_device_userptr (GstVspFilter * space,
     GstBuffer * buffer, GstVideoInfo * vinfo,
-    guint n_planes, GstVideoFrame *dest_frame,
-    struct v4l2_buffer *v4l2_buf)
+    guint n_planes, GstVideoFrame * dest_frame, struct v4l2_buffer *v4l2_buf)
 {
   gint i;
 
-  if (!gst_video_frame_map (dest_frame, vinfo, buffer,
-          GST_MAP_READ)) {
+  if (!gst_video_frame_map (dest_frame, vinfo, buffer, GST_MAP_READ)) {
     GST_ERROR_OBJECT (space, "Failed to gst_video_frame_map");
     return GST_FLOW_ERROR;
   }
@@ -1547,7 +1541,7 @@ prepare_transform_device_userptr (GstVspFilter * space,
 
 static gboolean
 get_offset_from_meta (GstVspFilter * space, GstBuffer * buffer,
-    GstVideoMeta *vmeta, struct v4l2_plane *planes)
+    GstVideoMeta * vmeta, struct v4l2_plane *planes)
 {
   gint i;
   gint n_mem = gst_buffer_n_memory (buffer);
@@ -1557,7 +1551,7 @@ get_offset_from_meta (GstVspFilter * space, GstBuffer * buffer,
     gsize skip;
 
     if (gst_buffer_find_memory (buffer, vmeta->offset[i],
-        1, &mem_idx, &length, &skip)) {
+            1, &mem_idx, &length, &skip)) {
       planes[i].data_offset += skip;
     } else {
       GST_ERROR_OBJECT (space, "buffer meta is invalid");
@@ -1614,14 +1608,13 @@ wait_output_ready (GstVspFilter * space)
 }
 
 static gboolean
-start_transform_device (GstVspFilter *space, GstBufferPool * pool,
-    GstVspFilterDeviceInfo * device, struct v4l2_buffer * v4l2_buf)
+start_transform_device (GstVspFilter * space, GstBufferPool * pool,
+    GstVspFilterDeviceInfo * device, struct v4l2_buffer *v4l2_buf)
 {
   set_v4l2_buf (v4l2_buf, device);
 
   if (queue_buffer (space, device, v4l2_buf)) {
-    GST_ERROR_OBJECT (space, "Failed to queue_buffer for %s",
-        device->name);
+    GST_ERROR_OBJECT (space, "Failed to queue_buffer for %s", device->name);
     return FALSE;
   }
 
@@ -1629,8 +1622,8 @@ start_transform_device (GstVspFilter *space, GstBufferPool * pool,
 }
 
 static gboolean
-init_transform_device (GstVspFilter *space, GstVspFilterDeviceInfo *dev,
-    GstBuffer * buf, GstVideoInfo *vinfo, enum v4l2_memory io,
+init_transform_device (GstVspFilter * space, GstVspFilterDeviceInfo * dev,
+    GstBuffer * buf, GstVideoInfo * vinfo, enum v4l2_memory io,
     GstBufferPool * pool)
 {
   gint i;
@@ -1649,7 +1642,7 @@ init_transform_device (GstVspFilter *space, GstVspFilterDeviceInfo *dev,
 
 static void
 setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
-    guint n_planes, struct v4l2_plane * planes)
+    guint n_planes, struct v4l2_plane *planes)
 {
   gint i;
 
@@ -1714,9 +1707,8 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
       goto transform_exit;
 
     if (!space->vsp_info->is_stream_started &&
-        !init_transform_device (space, dev, buf, vinfo,
-            v4l2_buf.memory, pool))
-       goto transform_exit;
+        !init_transform_device (space, dev, buf, vinfo, v4l2_buf.memory, pool))
+      goto transform_exit;
 
     switch (dev->io) {
       case V4L2_MEMORY_USERPTR:
@@ -1847,7 +1839,7 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
 
       gst_buffer_pool_set_active (space->devices[i].pool, FALSE);
       if (!request_buffers (space->devices[i].fd, space->devices[i].buftype,
-          &n_reqbufs, V4L2_MEMORY_MMAP)) {
+              &n_reqbufs, V4L2_MEMORY_MMAP)) {
         GST_ERROR_OBJECT (space, "reqbuf for %s failed (count = 0)",
             space->devices[i].name);
         return FALSE;
@@ -1975,7 +1967,9 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   return TRUE;
 }
 
-static gboolean gst_vsp_filter_stop (GstBaseTransform *trans) {
+static gboolean
+gst_vsp_filter_stop (GstBaseTransform * trans)
+{
   GstVspFilter *space;
   gboolean ret = TRUE;
 
@@ -2056,8 +2050,7 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
       GST_DEBUG_FUNCPTR (gst_vsp_filter_transform);
   gstbasetransform_class->set_caps =
       GST_DEBUG_FUNCPTR (gst_vsp_filter_set_caps);
-  gstbasetransform_class->stop =
-      GST_DEBUG_FUNCPTR (gst_vsp_filter_stop);
+  gstbasetransform_class->stop = GST_DEBUG_FUNCPTR (gst_vsp_filter_stop);
 
   gstbasetransform_class->passthrough_on_same_caps = TRUE;
 }
@@ -2065,7 +2058,7 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
 void
 entity_destroy (gpointer data)
 {
-  g_free ((struct media_entity_desc *)data);
+  g_free ((struct media_entity_desc *) data);
 }
 
 static void
@@ -2093,7 +2086,7 @@ gst_vsp_filter_init (GstVspFilter * space)
 
   vsp_info->resz_ventity.fd = -1;
 
-  init_colorimetry_table();
+  init_colorimetry_table ();
 
   space->hash_t = g_hash_table_new_full (g_str_hash, g_str_equal,
       NULL, entity_destroy);
@@ -2170,8 +2163,8 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
 }
 
 static gint
-queue_buffer (GstVspFilter * space,  GstVspFilterDeviceInfo * device,
-    struct v4l2_buffer * buf)
+queue_buffer (GstVspFilter * space, GstVspFilterDeviceInfo * device,
+    struct v4l2_buffer *buf)
 {
   if (-1 == xioctl (device->fd, VIDIOC_QBUF, buf)) {
     GST_ERROR_OBJECT (space,

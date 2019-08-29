@@ -71,21 +71,19 @@ init_colorimetry_table ()
   gint i;
   gint n_cimetries = sizeof (colorimetries) / sizeof (colorimetries[0]);
 
-  if (G_IS_VALUE(&colorimetries[0].src_value))
+  if (G_IS_VALUE (&colorimetries[0].src_value))
     return;
 
   for (i = 0; i < n_cimetries; i++) {
     g_value_init (&colorimetries[i].src_value, G_TYPE_STRING);
     g_value_init (&colorimetries[i].dest_value, GST_TYPE_LIST);
-    gst_value_deserialize (&colorimetries[i].src_value,
-      colorimetries[i].src);
-    gst_value_deserialize (&colorimetries[i].dest_value,
-      colorimetries[i].dest);
+    gst_value_deserialize (&colorimetries[i].src_value, colorimetries[i].src);
+    gst_value_deserialize (&colorimetries[i].dest_value, colorimetries[i].dest);
   }
 }
 
 struct colorimetry *
-find_colorimetry (const GValue *src)
+find_colorimetry (const GValue * src)
 {
   gint i;
   gint n_cimetries = sizeof (colorimetries) / sizeof (colorimetries[0]);
@@ -95,7 +93,7 @@ find_colorimetry (const GValue *src)
 
   for (i = 0; i < n_cimetries; i++) {
     if (gst_value_compare (src, &colorimetries[i].src_value)
-          == GST_VALUE_EQUAL) {
+        == GST_VALUE_EQUAL) {
       return &colorimetries[i];
     }
   }
@@ -130,7 +128,7 @@ set_quantization (GstVideoColorRange color_range)
 }
 
 guint
-round_down_width (const GstVideoFormatInfo *finfo, guint width)
+round_down_width (const GstVideoFormatInfo * finfo, guint width)
 {
   if (FORMAT_NEEDS_WIDTH_ALIGN (finfo))
     return GST_ROUND_DOWN_2 (width);
@@ -139,7 +137,7 @@ round_down_width (const GstVideoFormatInfo *finfo, guint width)
 }
 
 guint
-round_down_height (const GstVideoFormatInfo *finfo, guint height)
+round_down_height (const GstVideoFormatInfo * finfo, guint height)
 {
   if (FORMAT_NEEDS_HEIGHT_ALIGN (finfo))
     return GST_ROUND_DOWN_2 (height);
@@ -148,7 +146,7 @@ round_down_height (const GstVideoFormatInfo *finfo, guint height)
 }
 
 guint
-round_up_width (const GstVideoFormatInfo *finfo, guint width)
+round_up_width (const GstVideoFormatInfo * finfo, guint width)
 {
   if (FORMAT_NEEDS_WIDTH_ALIGN (finfo))
     return GST_ROUND_UP_2 (width);
@@ -157,7 +155,7 @@ round_up_width (const GstVideoFormatInfo *finfo, guint width)
 }
 
 guint
-round_up_height (const GstVideoFormatInfo *finfo, guint height)
+round_up_height (const GstVideoFormatInfo * finfo, guint height)
 {
   if (FORMAT_NEEDS_HEIGHT_ALIGN (finfo))
     return GST_ROUND_UP_2 (height);
@@ -167,7 +165,7 @@ round_up_height (const GstVideoFormatInfo *finfo, guint height)
 
 gint
 set_colorspace (GstVideoFormat vid_fmt, guint * fourcc,
-    enum v4l2_mbus_pixelcode *code, guint * n_planes)
+    enum v4l2_mbus_pixelcode * code, guint * n_planes)
 {
   int nr_exts = sizeof (exts) / sizeof (exts[0]);
   int i;
@@ -255,8 +253,7 @@ set_format (gint fd, guint width, guint height, guint format,
 
   /* BT.709 full range is not supported by hardware.
      Fall back to BT.601 full range */
-  if (encoding == V4L2_YCBCR_ENC_709 &&
-      quant == V4L2_QUANTIZATION_FULL_RANGE) {
+  if (encoding == V4L2_YCBCR_ENC_709 && quant == V4L2_QUANTIZATION_FULL_RANGE) {
     fmt.fmt.pix_mp.ycbcr_enc = V4L2_YCBCR_ENC_601;
   } else {
     fmt.fmt.pix_mp.ycbcr_enc = encoding;

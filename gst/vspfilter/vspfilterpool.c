@@ -198,7 +198,8 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   memset (self->stride, 0, sizeof (self->stride));
 
   if (!setup_format (bpool, pix_fmt, V4L2_MEMORY_MMAP, vinfo,
-      self->stride, self->size, set_quantization (vinfo->colorimetry.range))) {
+          self->stride, self->size,
+          set_quantization (vinfo->colorimetry.range))) {
     GST_ERROR_OBJECT (self, "Failed to setup device for %s",
         buftype_str (self->buftype));
     return FALSE;
@@ -242,7 +243,7 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
 
   if (-1 == xioctl (self->fd, VIDIOC_STREAMOFF, &self->buftype)) {
     GST_ERROR_OBJECT (self, "streamoff for %s failed",
-         buftype_str (self->buftype));
+        buftype_str (self->buftype));
     return FALSE;
   }
 
@@ -251,14 +252,13 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
     return FALSE;
   }
 
-  if (!request_buffers (self->fd, self->buftype, &n_reqbufs,
-              V4L2_MEMORY_MMAP)) {
-     GST_ERROR_OBJECT (self, "reqbuf for %s failed (count = 0)",
-          buftype_str (self->buftype));
-     if (errno == EBUSY)
-       GST_ERROR_OBJECT (self, "reqbuf failed for EBUSY."
+  if (!request_buffers (self->fd, self->buftype, &n_reqbufs, V4L2_MEMORY_MMAP)) {
+    GST_ERROR_OBJECT (self, "reqbuf for %s failed (count = 0)",
+        buftype_str (self->buftype));
+    if (errno == EBUSY)
+      GST_ERROR_OBJECT (self, "reqbuf failed for EBUSY."
           "May be a problem of videobuf2 driver");
-     return FALSE;
+    return FALSE;
   }
 
   g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
@@ -322,8 +322,7 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
     }
 
     gst_buffer_append_memory (vf_buffer->buffer,
-        gst_dmabuf_allocator_alloc (self->allocator, expbuf.fd,
-        self->size[i]));
+        gst_dmabuf_allocator_alloc (self->allocator, expbuf.fd, self->size[i]));
 
     offset[i] = total;
     total += self->size[i];
