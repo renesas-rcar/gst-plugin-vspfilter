@@ -240,16 +240,17 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
 {
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
   guint n_reqbufs = 0;
+  gboolean stop_success = TRUE;
 
   if (-1 == xioctl (self->fd, VIDIOC_STREAMOFF, &self->buftype)) {
     GST_ERROR_OBJECT (self, "streamoff for %s failed",
         buftype_str (self->buftype));
-    return FALSE;
+    stop_success = FALSE;
   }
 
   if (!GST_BUFFER_POOL_CLASS (parent_class)->stop (bpool)) {
     GST_ERROR_OBJECT (self, "Failed to free buffer");
-    return FALSE;
+    stop_success = FALSE;
   }
 
   if (!request_buffers (self->fd, self->buftype, &n_reqbufs, V4L2_MEMORY_MMAP)) {
@@ -258,13 +259,13 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
     if (errno == EBUSY)
       GST_ERROR_OBJECT (self, "reqbuf failed for EBUSY."
           "May be a problem of videobuf2 driver");
-    return FALSE;
+    stop_success = FALSE;
   }
 
   g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
   self->exported = NULL;
 
-  return TRUE;
+  return stop_success;
 }
 
 static void
