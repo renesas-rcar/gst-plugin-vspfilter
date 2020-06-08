@@ -1644,17 +1644,19 @@ static void
 setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
     guint n_planes, struct v4l2_plane *planes)
 {
+  const unsigned long page_size = getpagesize();
+  const unsigned long page_align_mask = ~(page_size - 1);
   gint i;
 
   for (i = 0; i < n_planes; i++) {
-    GstMemory *mem;
     struct v4l2_plane *plane = &planes[i];
+    guint comp_stride = GST_VIDEO_FRAME_COMP_STRIDE (dest_frame, i);
+    guint comp_height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, i);
 
-    mem = gst_buffer_get_memory (buf, i);
-
-    plane->m.userptr = (unsigned long) dest_frame->data[i] - mem->offset;
-    plane->length = plane->bytesused = dest_frame->map[i].maxsize + mem->offset;
-    plane->data_offset = mem->offset;
+    plane->m.userptr = ((unsigned long) dest_frame->data[i]) & page_align_mask;
+    plane->data_offset = (unsigned long) dest_frame->data[i] - plane->m.userptr;
+    plane->bytesused = comp_stride * comp_height;
+    plane->length = (plane->bytesused + page_size - 1) & page_align_mask;
   }
 }
 
