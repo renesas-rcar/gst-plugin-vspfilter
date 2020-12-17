@@ -1,7 +1,7 @@
 # gstreamer-vspfilter package version number
 m4_define([gst_vspfilter_major_version], [1])
 m4_define([gst_vspfilter_minor_version], [0])
-m4_define([gst_vspfilter_micro_version], [1])
+m4_define([gst_vspfilter_micro_version], [2])
 m4_define([gst_vspfilter_version],
           [gst_vspfilter_major_version.gst_vspfilter_minor_version.gst_vspfilter_micro_version])
 
