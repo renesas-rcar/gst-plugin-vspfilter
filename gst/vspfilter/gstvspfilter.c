@@ -1635,6 +1635,11 @@ init_transform_device (GstVspFilter * space, GstVspFilterDeviceInfo * dev,
 
   dev->io = io;
 
+  if ((buf->pool != pool) && (gst_buffer_pool_is_active (pool))) {
+    GST_DEBUG_OBJECT (space, "Reset device for external buffer");
+    gst_buffer_pool_set_active (pool, FALSE);
+  }
+
   if (!gst_buffer_pool_is_active (pool) &&
       !setup_device (space, pool, vinfo, dev, dev->strides, io))
     return FALSE;
