@@ -527,9 +527,10 @@ get_media_entities (GstVspFilter * space)
   struct media_entity_desc entity;
   struct media_entity_desc *ent_d;
 
-  for (i = 0; i < 256; i++) {
-    CLEAR (entity);
-    entity.id = i | MEDIA_ENT_ID_FLAG_NEXT;
+  CLEAR (entity);
+
+  while (1) {
+    entity.id = entity.id | MEDIA_ENT_ID_FLAG_NEXT;
     ret = ioctl (space->vsp_info->media_fd, MEDIA_IOC_ENUM_ENTITIES, &entity);
     if ((ret < 0) && (errno == EINVAL))
       break;
