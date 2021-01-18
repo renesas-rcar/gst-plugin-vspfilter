@@ -536,7 +536,7 @@ get_media_entities (GstVspFilter * space)
       break;
 
     ent_d = g_memdup (&entity, sizeof (struct media_entity_desc));
-    g_hash_table_insert (space->hash_t, ent_d->name, ent_d);
+    g_hash_table_replace (space->hash_t, ent_d->name, ent_d);
   }
 }
 
