@@ -1132,6 +1132,7 @@ gst_vsp_filter_vsp_device_deinit (GstVspFilter * space)
 
     g_free (space->devices[i].ventity.name);
     g_free (space->devices[i].name);
+    space->devices[i].name = NULL;
   }
 
   vsp_info->is_stream_started = FALSE;
