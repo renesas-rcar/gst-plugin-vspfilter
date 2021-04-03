@@ -1,7 +1,7 @@
 /* GStreamer
  * Copyright (C) <1999> Erik Walthinsen <omega@cse.ogi.edu>
  * This file:
- * Copyright (C) 2014-2018 Renesas Electronics Corporation
+ * Copyright (C) 2014-2021 Renesas Electronics Corporation
  * Based on videoconvert by Ronald Bultje <rbultje@ronald.bitfreak.net>
  *                          David Schleef <ds@schleef.org>
  *
@@ -1651,7 +1651,7 @@ static void
 setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
     guint n_planes, struct v4l2_plane *planes)
 {
-  const unsigned long page_size = getpagesize();
+  const unsigned long page_size = getpagesize ();
   const unsigned long page_align_mask = ~(page_size - 1);
   gint i;
 
