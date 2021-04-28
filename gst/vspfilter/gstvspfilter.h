@@ -130,6 +130,7 @@ struct _GstVspFilterDeviceInfo
   GstVspFilterEntityInfo ventity;
 
   gboolean is_input_device;
+  gboolean copy_mode;
 };
 
 /**

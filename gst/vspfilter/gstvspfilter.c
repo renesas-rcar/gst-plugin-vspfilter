@@ -1351,60 +1351,87 @@ gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
   }
 }
 
-static void
-set_v4l2_buf_mmap (struct v4l2_buffer *v4l2_buf, GstBuffer * buffer)
+static gsize
+get_buffer_plane_offset (GstBuffer * buffer, GstVideoMeta * vmeta, int plane_index)
 {
-  v4l2_buf->memory = V4L2_MEMORY_MMAP;
-  v4l2_buf->index = vspfilter_buffer_pool_get_buffer_index (buffer);
+
+  guint mem_idx, length;
+  gsize skip;
+
+  if (!vmeta || !gst_buffer_find_memory (buffer, vmeta->offset[plane_index],
+          1, &mem_idx, &length, &skip))
+    return 0;
+
+  return skip;
+
 }
 
-static void
-set_v4l2_input_plane_mmap (GstBuffer * buffer, guint n_planes,
-    struct v4l2_plane *planes)
+static GstFlowReturn
+setup_v4l2_buffer_mmap (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
+    GstBuffer * buffer, GstVspFilterDeviceInfo * dev)
 {
   gint i;
+  struct v4l2_plane *planes = v4l2_buf->m.planes;
   gint *size = vspfilter_buffer_pool_get_size (buffer->pool);
+  GstVideoMeta *vmeta = gst_buffer_get_video_meta (buffer);
 
-  for (i = 0; i < n_planes; i++)
+  v4l2_buf->index = vspfilter_buffer_pool_get_buffer_index (buffer);
+
+  if (!dev->is_input_device)
+    return GST_FLOW_OK;
+
+  for (i = 0; i < dev->n_planes; i++) {
     planes[i].length = planes[i].bytesused = size[i];
+    planes[i].data_offset += get_buffer_plane_offset (buffer, vmeta, i);
+  }
+
+  return GST_FLOW_OK;
 }
 
-static void
-set_v4l2_input_plane_dmabuf (GstVideoInfo * vinfo, struct v4l2_plane *planes,
-    guint n_planes, guint * strides)
+static GstFlowReturn
+setup_v4l2_buffer_dmabuf (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
+    GstBuffer * buffer, GstVspFilterDeviceInfo * dev, GstVideoInfo * vinfo)
 {
   guint height;
   gint i;
 
+  struct v4l2_plane *planes = v4l2_buf->m.planes;
+  GstVideoMeta *vmeta = gst_buffer_get_video_meta (buffer);
+
   /* When import dmabuf, device size setting can be rounded down */
   height = round_down_height (vinfo->finfo, vinfo->height);
 
-  /* set up planes for queuing input buffers */
-  for (i = 0; i < n_planes; i++) {
+  /* TODO: What happens when number of memories in DMABUF != n_planes */
+  for (i = 0; i < dev->n_planes; i++) {
     guint plane_height;
+    GstMemory *mem = gst_buffer_peek_memory (buffer, i);
+
+    if (!mem)
+        return GST_FLOW_ERROR;
 
     plane_height =
         GST_VIDEO_SUB_SCALE (GST_VIDEO_FORMAT_INFO_H_SUB (vinfo->finfo, i),
         height);
 
-    planes[i].length = strides[i] * plane_height;
-    planes[i].bytesused = planes[i].length;
-  }
-}
+    v4l2_buf->m.planes[i].m.fd = gst_dmabuf_memory_get_fd (mem);
 
-static void
-set_v4l2_buf (struct v4l2_buffer *v4l2_buf, GstVspFilterDeviceInfo * device)
-{
-  v4l2_buf->length = device->n_planes;
-  v4l2_buf->type = device->buftype;
+    if (dev->is_input_device) {
+      v4l2_buf->m.planes[i].data_offset += mem->offset;
+      planes[i].length = dev->strides[i] * plane_height;
+      planes[i].bytesused = planes[i].length;
+      planes[i].data_offset += get_buffer_plane_offset (buffer, vmeta, i);
+    }
+  }
+  return GST_FLOW_OK;
 }
 
 static GstFlowReturn
-copy_frame (GstVspFilter * space, GstBufferPool * pool, GstBuffer * src,
-    GstBuffer ** dst, GstVideoInfo * vinfo, GstVideoFrame * dest_frame)
+copy_frame (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
+    GstBuffer * src, GstBuffer ** dst)
 {
   GstFlowReturn ret;
   GstVideoFrame frame;
+  GstVideoFrame dest_frame;
 
   /* Only input buffers can pass this route. */
   GST_LOG_OBJECT (space, "Copy buffer %p to MMAP memory", src);
@@ -1419,14 +1446,14 @@ copy_frame (GstVspFilter * space, GstBufferPool * pool, GstBuffer * src,
 
   if (!gst_video_frame_map (&frame, vinfo, src, GST_MAP_READ))
     goto invalid_buffer;
-  if (!gst_video_frame_map (dest_frame, vinfo, *dst, GST_MAP_WRITE)) {
+  if (!gst_video_frame_map (&dest_frame, vinfo, *dst, GST_MAP_WRITE)) {
     gst_video_frame_unmap (&frame);
     goto invalid_buffer;
   }
-  gst_buffer_unref (*dst);
 
-  gst_vsp_filter_copy_frame (dest_frame, &frame, vinfo);
+  gst_vsp_filter_copy_frame (&dest_frame, &frame, vinfo);
   gst_video_frame_unmap (&frame);
+  gst_video_frame_unmap (&dest_frame);
 
   return GST_FLOW_OK;
 
@@ -1446,42 +1473,6 @@ invalid_buffer:
         ("invalid video buffer received"));
     return GST_FLOW_ERROR;
   }
-}
-
-static GstFlowReturn
-prepare_transform_device_copy (GstVspFilter * space, GstBuffer * src,
-    GstBufferPool * pool, GstVideoInfo * vinfo, GstBuffer ** dst,
-    GstVideoFrame * dest_frame, struct v4l2_buffer *v4l2_buf)
-{
-  GstFlowReturn ret;
-  guint strides[VIDEO_MAX_PLANES];
-  gint i;
-
-  ret = copy_frame (space, pool, src, dst, vinfo, dest_frame);
-  if (ret != GST_FLOW_OK)
-    return ret;
-
-  set_v4l2_buf_mmap (v4l2_buf, *dst);
-
-  return GST_FLOW_OK;
-}
-
-static void
-set_v4l2_buf_dmabuf (GstVspFilter * space, GstBuffer * buffer,
-    struct v4l2_buffer *v4l2_buf)
-{
-  gint i;
-  gint n_mem = gst_buffer_n_memory (buffer);
-
-  for (i = 0; i < n_mem; i++) {
-    GstMemory *mem = gst_buffer_get_memory (buffer, i);
-
-    v4l2_buf->m.planes[i].m.fd = gst_dmabuf_memory_get_fd (mem);
-    v4l2_buf->m.planes[i].data_offset += mem->offset;
-    gst_memory_unref (mem);
-  }
-
-  v4l2_buf->memory = V4L2_MEMORY_DMABUF;
 }
 
 static gboolean
@@ -1525,62 +1516,6 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
 }
 
 static GstFlowReturn
-prepare_transform_device_userptr (GstVspFilter * space,
-    GstBuffer * buffer, GstVideoInfo * vinfo,
-    guint n_planes, GstVideoFrame * dest_frame, struct v4l2_buffer *v4l2_buf)
-{
-  gint i;
-
-  if (!gst_video_frame_map (dest_frame, vinfo, buffer, GST_MAP_READ)) {
-    GST_ERROR_OBJECT (space, "Failed to gst_video_frame_map");
-    return GST_FLOW_ERROR;
-  }
-
-  v4l2_buf->memory = V4L2_MEMORY_USERPTR;
-
-  return GST_FLOW_OK;
-}
-
-static gboolean
-get_offset_from_meta (GstVspFilter * space, GstBuffer * buffer,
-    GstVideoMeta * vmeta, struct v4l2_plane *planes)
-{
-  gint i;
-  gint n_mem = gst_buffer_n_memory (buffer);
-
-  for (i = 0; i < n_mem; i++) {
-    guint mem_idx, length;
-    gsize skip;
-
-    if (gst_buffer_find_memory (buffer, vmeta->offset[i],
-            1, &mem_idx, &length, &skip)) {
-      planes[i].data_offset += skip;
-    } else {
-      GST_ERROR_OBJECT (space, "buffer meta is invalid");
-      return FALSE;
-    }
-  }
-
-  return TRUE;
-}
-
-static GstFlowReturn
-prepare_transform_device (GstVspFilter * space,
-    GstBuffer * buffer, GstBufferPool * pool, struct v4l2_buffer *v4l2_buf)
-{
-  GstMemory *mem = gst_buffer_peek_memory (buffer, 0);
-
-  if (buffer->pool == pool)
-    set_v4l2_buf_mmap (v4l2_buf, buffer);
-  else if (gst_is_dmabuf_memory (mem))
-    set_v4l2_buf_dmabuf (space, buffer, v4l2_buf);
-  else
-    g_assert_not_reached ();
-
-  return GST_FLOW_OK;
-}
-
-static GstFlowReturn
 wait_output_ready (GstVspFilter * space)
 {
   struct timeval tv;
@@ -1613,7 +1548,8 @@ static gboolean
 start_transform_device (GstVspFilter * space, GstBufferPool * pool,
     GstVspFilterDeviceInfo * device, struct v4l2_buffer *v4l2_buf)
 {
-  set_v4l2_buf (v4l2_buf, device);
+  v4l2_buf->length = device->n_planes;
+  v4l2_buf->type = device->buftype;
 
   if (queue_buffer (space, device, v4l2_buf)) {
     GST_ERROR_OBJECT (space, "Failed to queue_buffer for %s", device->name);
@@ -1647,16 +1583,23 @@ init_transform_device (GstVspFilter * space, GstVspFilterDeviceInfo * dev,
   return TRUE;
 }
 
-static void
-setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
-    guint n_planes, struct v4l2_plane *planes)
+static GstFlowReturn
+setup_v4l2_buffer_userptr (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
+    GstBuffer * buf, GstVspFilterDeviceInfo * dev, GstVideoInfo * vinfo,
+    GstVideoFrame * dest_frame)
 {
-  const unsigned long page_size = getpagesize();
+  const unsigned long page_size = getpagesize ();
   const unsigned long page_align_mask = ~(page_size - 1);
   gint i;
 
-  for (i = 0; i < n_planes; i++) {
-    struct v4l2_plane *plane = &planes[i];
+
+  if (!gst_video_frame_map (dest_frame, vinfo, buf, GST_MAP_READ)) {
+    GST_ERROR_OBJECT (space, "Failed to gst_video_frame_map");
+    return GST_FLOW_ERROR;
+  }
+
+  for (i = 0; i < dev->n_planes; i++) {
+    struct v4l2_plane *plane = &v4l2_buf->m.planes[i];
     guint comp_stride = GST_VIDEO_FRAME_COMP_STRIDE (dest_frame, i);
     guint comp_height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, i);
 
@@ -1665,6 +1608,7 @@ setup_v4l2_plane_userptr (GstBuffer * buf, GstVideoFrame * dest_frame,
     plane->bytesused = comp_stride * comp_height;
     plane->length = (plane->bytesused + page_size - 1) & page_align_mask;
   }
+  return GST_FLOW_OK;
 }
 
 static GstFlowReturn
@@ -1675,12 +1619,15 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   GstVspFilter *space = GST_VSP_FILTER_CAST (filter);
   GstBuffer *bufs[MAX_DEVICES];
   GstVideoInfo *vinfos[MAX_DEVICES];
-  GstVideoFrame dest_frame;
+  GstVideoFrame userptr_frame;
+  GstBuffer *copy_buf = NULL;
   GstFlowReturn ret;
   gint i;
 
   if (G_UNLIKELY (!filter->negotiated))
     goto unknown_format;
+
+  CLEAR (userptr_frame);
 
   bufs[OUT_DEV] = inbuf;
   bufs[CAP_DEV] = outbuf;
@@ -1697,50 +1644,57 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 
     v4l2_buf.m.planes = planes;
 
-    CLEAR (dest_frame);
+    if (!space->vsp_info->is_stream_started) {
+      enum v4l2_memory io_mode;
 
-    if (dev->io_mode == GST_VSPFILTER_IO_USERPTR) {
-      ret = prepare_transform_device_userptr (space, buf,
-          vinfo, dev->n_planes, &dest_frame, &v4l2_buf);
-    } else if (buf->pool != pool &&
-        !gst_is_dmabuf_memory (gst_buffer_peek_memory (buf, 0))) {
-      GstBuffer *mmap_buf;
-
-      ret = prepare_transform_device_copy (space, buf, pool, vinfo, &mmap_buf,
-          &dest_frame, &v4l2_buf);
-      buf = mmap_buf;
-    } else {
-      ret = prepare_transform_device (space, buf, pool, &v4l2_buf);
+      if (dev->io_mode == GST_VSPFILTER_IO_USERPTR) {
+        /* userptr mode */
+        io_mode = V4L2_MEMORY_USERPTR;
+      } else if (buf->pool == pool) {
+        /* sysmem and dmabuf memories managed in vspfilterpool */
+        io_mode = V4L2_MEMORY_MMAP;
+      } else if (gst_is_dmabuf_memory (gst_buffer_peek_memory (buf, 0))) {
+        /* external dmabuf (input only) */
+        if (!dev->is_input_device) {
+          GST_ERROR_OBJECT (space,
+              "dmabuf importing not supported for output buffers");
+          goto transform_exit;
+        }
+        io_mode = V4L2_MEMORY_DMABUF;
+      } else {
+        /* falback to bufer copy otherwise (input only) */
+        if (!dev->is_input_device) {
+          GST_ERROR_OBJECT (space,
+              "Invalid output buffer type. Not userptr or mmap/dmabuf export");
+          goto transform_exit;
+        }
+        io_mode = V4L2_MEMORY_MMAP;
+        dev->copy_mode = TRUE;
+      }
+      if (!init_transform_device (space, dev, buf, vinfo, io_mode, pool))
+        goto transform_exit;
     }
-    if (ret != GST_FLOW_OK)
-      goto transform_exit;
-
-    if (!space->vsp_info->is_stream_started &&
-        !init_transform_device (space, dev, buf, vinfo, v4l2_buf.memory, pool))
-      goto transform_exit;
+    if (dev->copy_mode) {
+      ret = copy_frame (space, pool, vinfo, buf, &copy_buf);
+      if (ret != GST_FLOW_OK)
+        goto transform_exit;
+      buf = copy_buf;
+    }
 
     switch (dev->io) {
       case V4L2_MEMORY_USERPTR:
-        setup_v4l2_plane_userptr (buf, &dest_frame, dev->n_planes, planes);
+        setup_v4l2_buffer_userptr (space, &v4l2_buf, buf, dev, vinfo,
+            &userptr_frame);
         break;
       case V4L2_MEMORY_MMAP:
-        if (dev->is_input_device)
-          set_v4l2_input_plane_mmap (buf, dev->n_planes, planes);
+        setup_v4l2_buffer_mmap (space, &v4l2_buf, buf, dev);
         break;
       case V4L2_MEMORY_DMABUF:
-        if (dev->is_input_device)
-          set_v4l2_input_plane_dmabuf (vinfo, planes, dev->n_planes,
-              dev->strides);
+        setup_v4l2_buffer_dmabuf (space, &v4l2_buf, buf, dev, vinfo);
         break;
     }
-    if (dev->io != V4L2_MEMORY_USERPTR) {
-      GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
 
-      if (vmeta && !get_offset_from_meta (space, buf, vmeta, planes)) {
-        ret = GST_FLOW_ERROR;
-        goto transform_exit;
-      }
-    }
+    v4l2_buf.memory = dev->io;
 
     if (!start_transform_device (space, pool, dev, &v4l2_buf)) {
       GST_ERROR_OBJECT (space, "start_transform_device for %s failed",
@@ -1748,8 +1702,6 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
       goto transform_exit;
     }
 
-    if (dest_frame.buffer)
-      gst_video_frame_unmap (&dest_frame);
   }
 
   if (!space->vsp_info->is_stream_started) {
@@ -1760,7 +1712,7 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     }
     for (i = 0; i < MAX_DEVICES; i++)
       if (!start_capturing (space, &space->devices[i]))
-        return FALSE;
+        goto transform_exit;
   }
 
   space->vsp_info->is_stream_started = TRUE;
@@ -1777,8 +1729,13 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   }
 
 transform_exit:
-  if (dest_frame.buffer)
-    gst_video_frame_unmap (&dest_frame);
+  /* Release the copy buffer if one was created */
+  if (copy_buf)
+    gst_buffer_unref (copy_buf);
+
+  /* Release the frame mapping if it was made */
+  if (userptr_frame.buffer)
+    gst_video_frame_unmap (&userptr_frame);
 
   return ret;
 
