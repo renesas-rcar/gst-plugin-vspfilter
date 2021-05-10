@@ -1392,34 +1392,43 @@ static GstFlowReturn
 setup_v4l2_buffer_dmabuf (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
     GstBuffer * buffer, GstVspFilterDeviceInfo * dev, GstVideoInfo * vinfo)
 {
-  guint height;
   gint i;
+  guint n_planes;
 
   struct v4l2_plane *planes = v4l2_buf->m.planes;
   GstVideoMeta *vmeta = gst_buffer_get_video_meta (buffer);
 
-  /* When import dmabuf, device size setting can be rounded down */
-  height = round_down_height (vinfo->finfo, vinfo->height);
+  if (vmeta)
+    n_planes = vmeta->n_planes;
+  else
+    n_planes = GST_VIDEO_INFO_N_PLANES (vinfo);
 
-  /* TODO: What happens when number of memories in DMABUF != n_planes */
-  for (i = 0; i < dev->n_planes; i++) {
-    guint plane_height;
-    GstMemory *mem = gst_buffer_peek_memory (buffer, i);
+  for (i = 0; i < n_planes; i++) {
+    guint mem_idx, length;
+    gsize skip;
+    GstMemory *mem;
+    gsize mem_size, mem_used, offset;
+    if (vmeta)
+      offset = vmeta->offset[i];
+    else
+      offset = GST_VIDEO_INFO_PLANE_OFFSET (vinfo, i);
 
+    if (!gst_buffer_find_memory (buffer, offset, 1, &mem_idx, &length, &skip)) {
+      return GST_FLOW_ERROR;
+    }
+
+    mem = gst_buffer_peek_memory (buffer, mem_idx);
     if (!mem)
-        return GST_FLOW_ERROR;
+      return GST_FLOW_ERROR;
 
-    plane_height =
-        GST_VIDEO_SUB_SCALE (GST_VIDEO_FORMAT_INFO_H_SUB (vinfo->finfo, i),
-        height);
+    mem_used = gst_memory_get_sizes (mem, NULL, &mem_size);
 
     v4l2_buf->m.planes[i].m.fd = gst_dmabuf_memory_get_fd (mem);
 
     if (dev->is_input_device) {
-      v4l2_buf->m.planes[i].data_offset += mem->offset;
-      planes[i].length = dev->strides[i] * plane_height;
-      planes[i].bytesused = planes[i].length;
-      planes[i].data_offset += get_buffer_plane_offset (buffer, vmeta, i);
+      planes[i].length = mem_size;
+      planes[i].bytesused = mem_used;
+      planes[i].data_offset = skip + mem->offset;
     }
   }
   return GST_FLOW_OK;
