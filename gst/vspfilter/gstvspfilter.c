@@ -1810,15 +1810,8 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
       return FALSE;
 
     if (space->devices[i].pool) {
-      guint n_reqbufs = 0;
-
-      gst_buffer_pool_set_active (space->devices[i].pool, FALSE);
-      if (!request_buffers (space->devices[i].fd, space->devices[i].buftype,
-              &n_reqbufs, V4L2_MEMORY_MMAP)) {
-        GST_ERROR_OBJECT (space, "reqbuf for %s failed (count = 0)",
-            space->devices[i].name);
+      if (!vspfilter_buffer_pool_orphan_pool(space->devices[i].pool))
         return FALSE;
-      }
     }
 
     newpool = gst_vsp_filter_setup_pool (&space->devices[i],
