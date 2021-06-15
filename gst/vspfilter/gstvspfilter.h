@@ -2,7 +2,7 @@
  * Copyright (C) <1999> Erik Walthinsen <omega@cse.ogi.edu>
  * This file:
  * Copyright (C) 2003 Ronald Bultje <rbultje@ronald.bitfreak.net>
- * Copyright (C) 2014-2019 Renesas Electronics Corporation
+ * Copyright (C) 2014-2019,2021 Renesas Electronics Corporation
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -94,6 +94,12 @@ enum
   SRC
 };
 
+typedef struct
+{
+  guint left;
+  guint top;
+} CropInfo;
+
 struct _GstVspFilterEntityInfo
 {
   gchar *name;
@@ -130,6 +136,7 @@ struct _GstVspFilterDeviceInfo
   GstVspFilterEntityInfo ventity;
 
   gboolean is_input_device;
+  CropInfo crop;
 };
 
 /**

@@ -669,8 +669,8 @@ set_crop (GstVspFilter * space, gint fd, guint * width, guint * height)
     .flags = V4L2_SEL_FLAG_LE,
   };
 
-  sel.r.top = 0;
-  sel.r.left = 0;
+  sel.r.top = space->devices[OUT_DEV].crop.top;
+  sel.r.left = space->devices[OUT_DEV].crop.left;
   sel.r.width = *width;
   sel.r.height = *height;
 
@@ -1691,9 +1691,24 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     GstVspFilterDeviceInfo *dev = &space->devices[i];
     GstBufferPool *pool = space->devices[i].pool;
     GstBuffer *buf = bufs[i];
-    GstVideoInfo *vinfo = vinfos[i];
+    GstVideoInfo *vinfo = gst_video_info_copy(vinfos[i]);
     struct v4l2_buffer v4l2_buf = { 0, };
     struct v4l2_plane planes[GST_VIDEO_MAX_PLANES] = { 0, };
+    GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
+    GstVideoCropMeta *crop_meta = gst_buffer_get_video_crop_meta (buf);
+
+    if (vmeta) {
+      vinfo->width = vmeta->width;
+      vinfo->height = vmeta->height;
+    }
+
+    if (crop_meta) {
+      dev->crop.left = crop_meta->x;
+      dev->crop.top = crop_meta->y;
+    } else {
+      dev->crop.left = 0;
+      dev->crop.top = 0;
+    }
 
     v4l2_buf.m.planes = planes;
 
@@ -1734,8 +1749,6 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
         break;
     }
     if (dev->io != V4L2_MEMORY_USERPTR) {
-      GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
-
       if (vmeta && !get_offset_from_meta (space, buf, vmeta, planes)) {
         ret = GST_FLOW_ERROR;
         goto transform_exit;
@@ -1750,6 +1763,8 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 
     if (dest_frame.buffer)
       gst_video_frame_unmap (&dest_frame);
+
+    gst_video_info_free (vinfo);
   }
 
   if (!space->vsp_info->is_stream_started) {
@@ -1974,6 +1989,7 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   gst_object_unref (pool);
 
   gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
+  gst_query_add_allocation_meta (query, GST_VIDEO_CROP_META_API_TYPE, NULL);
 
   return TRUE;
 }
