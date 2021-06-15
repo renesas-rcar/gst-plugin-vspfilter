@@ -1828,7 +1828,6 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
 
   for (i = 0; i < MAX_DEVICES; i++) {
     GstStructure *structure;
-    GstBufferPool *newpool;
 
     if (!gst_video_info_from_caps (&vinfo[i], caps[i]))
       goto invalid_caps;
@@ -1843,19 +1842,29 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
         !stop_capturing (space, &space->devices[i]))
       return FALSE;
 
+    /* Reconfigure buffer pool incase different caps */
     if (space->devices[i].pool) {
-      if (!vspfilter_buffer_pool_orphan_pool(space->devices[i].pool))
-        return FALSE;
+      GstCaps *pool_caps;
+      GstStructure *config;
+
+      config = gst_buffer_pool_get_config (space->devices[i].pool);
+      gst_buffer_pool_config_get_params (config, &pool_caps, NULL, NULL, NULL);
+      gst_structure_free(config);
+      if (!gst_caps_is_equal (caps[i], pool_caps)) {
+        if (!vspfilter_buffer_pool_orphan_pool(space->devices[i].pool))
+          return FALSE;
+
+        gst_object_unref (space->devices[i].pool);
+        space->devices[i].pool = NULL;
+      }
     }
 
-    newpool = gst_vsp_filter_setup_pool (&space->devices[i],
-        caps[i], vinfo[i].size, 0);
-    if (!newpool)
-      goto pool_setup_failed;
-
-    gst_object_replace ((GstObject **) & space->devices[i].pool,
-        (GstObject *) newpool);
-    gst_object_unref (newpool);
+    if (!space->devices[i].pool) {
+       space->devices[i].pool = gst_vsp_filter_setup_pool (&space->devices[i],
+           caps[i], vinfo[i].size, 0);
+       if (!space->devices[i].pool)
+         goto pool_setup_failed;
+    }
 
     ret = set_colorspace (vinfo[i].finfo->format, &space->devices[i].format,
         &code[i], &space->devices[i].n_planes);
