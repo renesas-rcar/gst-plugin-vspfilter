@@ -66,7 +66,7 @@ static struct colorimetry colorimetries[] = {
 };
 
 void
-init_colorimetry_table ()
+init_colorimetry_table (void)
 {
   gint i;
   gint n_cimetries = sizeof (colorimetries) / sizeof (colorimetries[0]);

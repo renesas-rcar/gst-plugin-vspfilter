@@ -63,6 +63,7 @@ struct _VspfilterBufferPoolClass
   GstBufferPoolClass parent_class;
 };
 
+GType vspfilter_buffer_pool_get_type (void);
 #define vspfilter_buffer_pool_parent_class parent_class
 G_DEFINE_TYPE (VspfilterBufferPool, vspfilter_buffer_pool,
     GST_TYPE_BUFFER_POOL);
@@ -180,11 +181,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   guint min, max;
   GstCaps *caps = NULL;
   guint pix_fmt;
-  guint n_reqbufs;
   gint ret;
-  guint width, height;
-  enum v4l2_ycbcr_encoding encoding;
-  enum v4l2_quantization quant;
   GstStructure *st;
   gint i;
   guint bufsize = 0;
@@ -315,7 +312,6 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
   VspfilterBuffer *vf_buffer;
   struct v4l2_exportbuffer expbuf;
   guint buf_index = VSPFILTER_INDEX_INVALID;
-  gsize size;
   gsize total = 0;
   gsize offset[GST_VIDEO_MAX_PLANES];
   gint ret;

@@ -96,10 +96,6 @@ static void gst_vsp_filter_set_property (GObject * object,
 static void gst_vsp_filter_get_property (GObject * object,
     guint property_id, GValue * value, GParamSpec * pspec);
 
-static GstFlowReturn
-gst_vsp_filter_transform_frame_process (GstVideoFilter * filter,
-    struct v4l2_buffer *in_v4l2_buf, struct v4l2_buffer *out_v4l2_buf);
-
 static gboolean gst_vsp_filter_stop (GstBaseTransform * trans);
 
 static gint
@@ -157,7 +153,6 @@ gst_vsp_filter_is_caps_format_supported_for_vsp (GstVspFilter * space,
 {
   GstStructure *st[MAX_DEVICES];
   gint i;
-  GstVspFilterVspInfo *vsp_info = space->vsp_info;
 
   if (direction == GST_PAD_SRC) {
     st[OUT_DEV] = gst_caps_get_structure (othercaps, 0);
@@ -320,7 +315,7 @@ gst_vsp_filter_filter_meta (GstBaseTransform * trans, GstQuery * query,
   return TRUE;
 }
 
-void
+static void
 gst_vspfilter_set_colorimetry (GstCaps * caps, GstCaps * caps_intersected)
 {
   gint i;
@@ -361,6 +356,7 @@ remove_format_info (GstCapsFeatures * features, GstStructure * structure,
 {
   gst_structure_remove_fields (structure, "format",
       "colorimetry", "chroma-site", "width", "height", NULL);
+  return TRUE;
 }
 
 /* The caps can be transformed into any other caps with format info removed.
@@ -374,7 +370,6 @@ gst_vsp_filter_transform_caps (GstBaseTransform * btrans,
   GstCaps *caps_copy;
   GstCaps *caps_intersected;
   GstCaps *template;
-  gint i, n;
 
   caps_copy = gst_caps_copy (caps);
 
@@ -523,7 +518,7 @@ leave:
 static void
 get_media_entities (GstVspFilter * space)
 {
-  gint i, ret;
+  gint ret;
   struct media_entity_desc entity;
   struct media_entity_desc *ent_d;
 
@@ -730,7 +725,7 @@ set_vsp_entity (GstVspFilter * space, GstVspFilterEntityInfo * ventity,
 }
 
 static gboolean
-lookup_entity (GstVspFilter * space, gchar * ent_name,
+lookup_entity (GstVspFilter * space, const gchar * ent_name,
     struct media_entity_desc *ent)
 {
   gchar tmp[256];
@@ -753,7 +748,7 @@ init_resize_device (GstVspFilter * space, GstVspFilterEntityInfo * resz_ent)
 {
   GstVspFilterVspInfo *vsp_info = space->vsp_info;
 
-  resz_ent->name = RESIZE_DEVICE_NAME;
+  resz_ent->name = (char *) RESIZE_DEVICE_NAME;
   /* input src code is always the same as output sink code */
   resz_ent->code[SINK] = resz_ent->code[SRC]
       = space->devices[CAP_DEV].ventity.code[SINK];
@@ -780,7 +775,8 @@ deinit_resize_device (GstVspFilter * space)
 {
   GstVspFilterEntityInfo *resz_ent = &space->vsp_info->resz_ventity;
 
-  close (resz_ent->fd);
+  if (resz_ent->fd >= 0)
+    close (resz_ent->fd);
   resz_ent->fd = -1;
 
   space->vsp_info->is_resz_device_initialized = FALSE;
@@ -792,7 +788,6 @@ setup_resize_device (GstVspFilter * space, GstVspFilterEntityInfo * out_ent,
     guint out_width, guint out_height)
 {
   GstVspFilterEntityInfo *resz_ent = &space->vsp_info->resz_ventity;
-  gint ret;
 
   if (!space->vsp_info->is_resz_device_initialized &&
       !init_resize_device (space, resz_ent)) {
@@ -821,8 +816,6 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
 {
   GstVspFilterVspInfo *vsp_info;
   const GstVideoFormatInfo *in_finfo;
-  gint ret;
-  guint n_bufs;
   gint in_width, in_height, out_width, out_height;
   guint in_sink_width, in_sink_height;
   guint in_src_width, in_src_height;
@@ -898,10 +891,6 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
 static gboolean
 stop_capturing (GstVspFilter * space, GstVspFilterDeviceInfo * device)
 {
-  GstVspFilterVspInfo *vsp_info;
-
-  vsp_info = space->vsp_info;
-
   GST_DEBUG_OBJECT (space, "stop streaming... ");
 
   if (-1 == xioctl (device->fd, VIDIOC_STREAMOFF, &device->buftype)) {
@@ -916,10 +905,8 @@ static void
 gst_vsp_filter_finalize (GObject * obj)
 {
   GstVspFilter *space;
-  GstVspFilterVspInfo *vsp_info;
 
   space = GST_VSP_FILTER (obj);
-  vsp_info = space->vsp_info;
 
   g_free (space->vsp_info);
 
@@ -958,7 +945,7 @@ init_device (GstVspFilter * space, GstVspFilterDeviceInfo * device)
   }
 
   /* look for a counterpart */
-  p = strtok (cap.card, " ");
+  p = strtok ((char *) cap.card, " ");
   if (vsp_info->ip_name == NULL) {
     vsp_info->ip_name = g_strdup (p);
     GST_DEBUG_OBJECT (space, "ip_name = %s", vsp_info->ip_name);
@@ -996,12 +983,9 @@ init_device (GstVspFilter * space, GstVspFilterDeviceInfo * device)
 static gint
 open_device (GstVspFilter * space, gchar * dev_name)
 {
-  GstVspFilterVspInfo *vsp_info;
   struct stat st;
   gint fd;
   const gchar *name;
-
-  vsp_info = space->vsp_info;
 
   name = dev_name;
 
@@ -1136,13 +1120,7 @@ gst_vsp_filter_vsp_device_deinit (GstVspFilter * space)
   }
 
   vsp_info->is_stream_started = FALSE;
-
-  if (vsp_info->resz_ventity.fd >= 0) {
-    close (vsp_info->resz_ventity.fd);
-    vsp_info->resz_ventity.fd = -1;
-  }
-
-  vsp_info->is_resz_device_initialized = FALSE;
+  deinit_resize_device (space);
 
   g_free (vsp_info->ip_name);
   vsp_info->ip_name = NULL;
@@ -1214,7 +1192,6 @@ static gboolean
 gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
 {
   GstVspFilter *space;
-  GstVspFilterVspInfo *vsp_info;
   GstBufferPool *pool = NULL;
   GstAllocator *allocator;
   guint n_allocators;
@@ -1228,7 +1205,6 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
   guint i;
 
   space = GST_VSP_FILTER_CAST (trans);
-  vsp_info = space->vsp_info;
 
   n_allocators = gst_query_get_n_allocation_params (query);
   for (i = 0; i < n_allocators; i++) {
@@ -1494,10 +1470,11 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
   guint width, height;
 
   if (device->is_input_device &&
-      space->input_color_range != GST_VSPFILTER_DEFAULT_COLOR_RANGE)
+      space->input_color_range != GST_VSPFILTER_DEFAULT_COLOR_RANGE) {
     quant = space->input_color_range;
-  else
+  } else {
     quant = set_quantization (vinfo->colorimetry.range);
+  }
 
   /* When import external buffer, device size setting can be rounded down */
   if (device->is_input_device) {
@@ -1586,7 +1563,7 @@ init_transform_device (GstVspFilter * space, GstVspFilterDeviceInfo * dev,
   }
 
   if (!gst_buffer_pool_is_active (pool) &&
-      !setup_device (space, pool, vinfo, dev, dev->strides, io))
+      !setup_device (space, pool, vinfo, dev, (gint *)dev->strides, io))
     return FALSE;
 
   return TRUE;
@@ -1630,7 +1607,7 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   GstVideoInfo *vinfos[MAX_DEVICES];
   GstVideoFrame userptr_frame;
   GstBuffer *copy_buf = NULL;
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_ERROR;
   gint i;
 
   if (G_UNLIKELY (!filter->negotiated))
@@ -1683,6 +1660,7 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
       if (!init_transform_device (space, dev, buf, vinfo, io_mode, pool))
         goto transform_exit;
     }
+
     if (dev->copy_mode) {
       ret = copy_frame (space, pool, vinfo, buf, &copy_buf);
       if (ret != GST_FLOW_OK)
@@ -1701,6 +1679,9 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
       case V4L2_MEMORY_DMABUF:
         setup_v4l2_buffer_dmabuf (space, &v4l2_buf, buf, dev, vinfo);
         break;
+      default:
+        GST_ERROR_OBJECT (space, "Unknown V4L2_MEMORY_ type: %d", dev->io);
+        goto transform_exit;
     }
 
     v4l2_buf.memory = dev->io;
@@ -1757,7 +1738,7 @@ unknown_format:
   }
 }
 
-void
+static void
 decide_pixelcode (GstVspFilterDeviceInfo * devices,
     enum v4l2_mbus_pixelcode code[MAX_DEVICES])
 {
@@ -1777,8 +1758,6 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   GstVideoFilterClass *fclass;
   GstVspFilter *space;
   GstVspFilterVspInfo *vsp_info;
-  guint buf_min = 0, buf_max = 0;
-  GstStructure *ins, *outs;
   GstCaps *caps[MAX_DEVICES];
   gint ret;
   enum v4l2_mbus_pixelcode code[MAX_DEVICES];
@@ -1810,7 +1789,7 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
       return FALSE;
 
     if (space->devices[i].pool) {
-      if (!vspfilter_buffer_pool_orphan_pool(space->devices[i].pool))
+      if (!vspfilter_buffer_pool_orphan_pool (space->devices[i].pool))
         return FALSE;
     }
 
@@ -1882,13 +1861,11 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
     GstQuery * decide_query, GstQuery * query)
 {
   GstVspFilter *space;
-  GstVspFilterVspInfo *vsp_info;
   GstBufferPool *pool;
   GstStructure *config;
   guint min, size;
 
   space = GST_VSP_FILTER_CAST (trans);
-  vsp_info = space->vsp_info;
 
   if (!GST_BASE_TRANSFORM_CLASS (parent_class)->propose_allocation (trans,
           decide_query, query))
@@ -2023,7 +2000,7 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
   gstbasetransform_class->passthrough_on_same_caps = TRUE;
 }
 
-void
+static void
 entity_destroy (gpointer data)
 {
   g_free ((struct media_entity_desc *) data);
@@ -2065,10 +2042,8 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstVspFilter *space;
-  GstVspFilterVspInfo *vsp_info;
 
   space = GST_VSP_FILTER (object);
-  vsp_info = space->vsp_info;
 
   switch (property_id) {
     case PROP_VSP_DEVFILE_INPUT:
@@ -2103,10 +2078,8 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
     GValue * value, GParamSpec * pspec)
 {
   GstVspFilter *space;
-  GstVspFilterVspInfo *vsp_info;
 
   space = GST_VSP_FILTER (object);
-  vsp_info = space->vsp_info;
 
   switch (property_id) {
     case PROP_VSP_DEVFILE_INPUT:
