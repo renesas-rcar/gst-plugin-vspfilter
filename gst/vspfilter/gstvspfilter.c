@@ -655,7 +655,8 @@ link_entities (GstVspFilter * space, GstVspFilterEntityInfo * out_ent,
 }
 
 static gboolean
-set_crop (GstVspFilter * space, gint fd, guint * width, guint * height)
+set_crop (GstVspFilter * space, gint fd, guint x, guint y,
+    guint * width, guint * height)
 {
   struct v4l2_subdev_selection sel = {
     .pad = 0,
@@ -664,8 +665,8 @@ set_crop (GstVspFilter * space, gint fd, guint * width, guint * height)
     .flags = V4L2_SEL_FLAG_LE,
   };
 
-  sel.r.top = 0;
-  sel.r.left = 0;
+  sel.r.top = y;
+  sel.r.left = x;
   sel.r.width = *width;
   sel.r.height = *height;
 
@@ -812,21 +813,27 @@ setup_resize_device (GstVspFilter * space, GstVspFilterEntityInfo * out_ent,
 
 static gboolean
 set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
-    GstVideoInfo * out_info)
+    GstVideoInfo * out_info, GstVideoCropMeta * in_crop)
 {
   GstVspFilterVspInfo *vsp_info;
   const GstVideoFormatInfo *in_finfo;
-  gint in_width, in_height, output_width, output_height;
+  gint output_width, output_height;
   guint in_sink_width, in_sink_height;
   guint in_src_width, in_src_height;
   GstVspFilterEntityInfo *out_ent, *cap_ent;
+  GstVideoCropMeta default_crop = {     /* default is no cropping */
+    .x = 0,
+    .y = 0,
+    .width = in_info->width,
+    .height = in_info->height,
+  };
 
   vsp_info = space->vsp_info;
 
-  in_width = in_info->width;
-  in_height = in_info->height;
-
   out_ent = &space->devices[OUT_DEV].ventity;
+
+  if (!in_crop)
+    in_crop = &default_crop;
 
   /* Get the current input size set on the input device as it may not be
      the same as the value that was used to set the format */
@@ -838,8 +845,8 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
 
   /*in case odd size of yuv buffer, separate buffer and image size */
   in_finfo = gst_video_format_get_info (in_info->finfo->format);
-  in_src_width = round_down_width (in_finfo, in_width);
-  in_src_height = round_down_height (in_finfo, in_height);
+  in_src_width = round_down_width (in_finfo, in_crop->width);
+  in_src_height = round_down_height (in_finfo, in_crop->height);
 
   if (!set_vsp_entity (space, out_ent, in_sink_width,
           in_sink_height, in_src_width, in_src_height)) {
@@ -847,10 +854,12 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
     return FALSE;
   }
 
-  if ((in_sink_width != in_src_width || in_sink_height != in_src_height) &&
-      !set_crop (space, out_ent->fd, &in_src_width, &in_src_height)) {
-    GST_ERROR_OBJECT (space, "needs crop but set_crop failed");
-    return FALSE;
+  if (in_sink_width != in_src_width || in_sink_height != in_src_height) {
+    if (!set_crop (space, out_ent->fd, in_crop->x, in_crop->y, &in_src_width,
+            &in_src_height)) {
+      GST_ERROR_OBJECT (space, "needs crop but set_crop failed");
+      return FALSE;
+    }
   }
 
   output_width = out_info->width;
@@ -1534,10 +1543,19 @@ video_info_update_from_meta (GstVideoInfo * vinfo, GstVideoMeta * vmeta)
   if (vmeta->n_planes != GST_VIDEO_INFO_N_PLANES (vinfo))
     return FALSE;
 
+  /* If vspfilter is configured to crop the input based on VideoCropMeta settings,
+     the input buffer size (pre-crop) will be different from the negotiated
+     size (post-crop). Strides, and offsets as well, so update the VideoInfo to
+     match the actual buffer parameter. Post crop settings can be recovered from the
+     crop meta. */
+  vinfo->width = vmeta->width;
+  vinfo->height = vmeta->height;
+
   for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++) {
     vinfo->stride[i] = vmeta->stride[i];
     vinfo->offset[i] = vmeta->offset[i];
   }
+
   return TRUE;
 }
 
@@ -1690,11 +1708,13 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
   }
 
   if (!space->vsp_info->is_stream_started) {
-    if (!set_vsp_entities (space, vinfos[OUT_DEV], vinfos[CAP_DEV])) {
+    GstVideoCropMeta *crop_meta = gst_buffer_get_video_crop_meta (inbuf);
+    if (!set_vsp_entities (space, vinfos[OUT_DEV], vinfos[CAP_DEV], crop_meta)) {
       GST_ERROR_OBJECT (space, "set_vsp_entities failed");
       ret = GST_FLOW_ERROR;
       goto transform_exit;
     }
+
     for (i = 0; i < MAX_DEVICES; i++)
       if (!start_capturing (space, &space->devices[i]))
         goto transform_exit;
@@ -1903,6 +1923,7 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   gst_object_unref (pool);
 
   gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
+  gst_query_add_allocation_meta (query, GST_VIDEO_CROP_META_API_TYPE, NULL);
 
   return TRUE;
 }
