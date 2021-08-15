@@ -1322,14 +1322,15 @@ gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
 }
 
 static gsize
-get_buffer_plane_offset (GstBuffer * buffer, GstVideoMeta * vmeta, int plane_index)
+get_buffer_plane_offset (GstBuffer * buffer, GstVideoInfo * vinfo,
+    int plane_index)
 {
 
   guint mem_idx, length;
   gsize skip;
+  guint offset = GST_VIDEO_INFO_PLANE_OFFSET (vinfo, plane_index);
 
-  if (!vmeta || !gst_buffer_find_memory (buffer, vmeta->offset[plane_index],
-          1, &mem_idx, &length, &skip))
+  if (!gst_buffer_find_memory (buffer, offset, 1, &mem_idx, &length, &skip))
     return 0;
 
   return skip;
@@ -1338,21 +1339,20 @@ get_buffer_plane_offset (GstBuffer * buffer, GstVideoMeta * vmeta, int plane_ind
 
 static GstFlowReturn
 setup_v4l2_buffer_mmap (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
-    GstBuffer * buffer, GstVspFilterDeviceInfo * dev)
+    GstBuffer * buffer, GstVspFilterDeviceInfo * dev, GstVideoInfo * vinfo)
 {
   gint i;
   struct v4l2_plane *planes = v4l2_buf->m.planes;
   gint *size = vspfilter_buffer_pool_get_size (buffer->pool);
-  GstVideoMeta *vmeta = gst_buffer_get_video_meta (buffer);
 
   v4l2_buf->index = vspfilter_buffer_pool_get_buffer_index (buffer);
 
   if (!dev->is_input_device)
     return GST_FLOW_OK;
 
-  for (i = 0; i < dev->n_planes; i++) {
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++) {
     planes[i].length = planes[i].bytesused = size[i];
-    planes[i].data_offset += get_buffer_plane_offset (buffer, vmeta, i);
+    planes[i].data_offset += get_buffer_plane_offset (buffer, vinfo, i);
   }
 
   return GST_FLOW_OK;
@@ -1363,26 +1363,16 @@ setup_v4l2_buffer_dmabuf (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
     GstBuffer * buffer, GstVspFilterDeviceInfo * dev, GstVideoInfo * vinfo)
 {
   gint i;
-  guint n_planes;
 
   struct v4l2_plane *planes = v4l2_buf->m.planes;
-  GstVideoMeta *vmeta = gst_buffer_get_video_meta (buffer);
 
-  if (vmeta)
-    n_planes = vmeta->n_planes;
-  else
-    n_planes = GST_VIDEO_INFO_N_PLANES (vinfo);
-
-  for (i = 0; i < n_planes; i++) {
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++) {
     guint mem_idx, length;
     gsize skip;
     GstMemory *mem;
     gsize mem_size, mem_used, offset;
-    if (vmeta)
-      offset = vmeta->offset[i];
-    else
-      offset = GST_VIDEO_INFO_PLANE_OFFSET (vinfo, i);
 
+    offset = GST_VIDEO_INFO_PLANE_OFFSET (vinfo, i);
     if (!gst_buffer_find_memory (buffer, offset, 1, &mem_idx, &length, &skip)) {
       return GST_FLOW_ERROR;
     }
@@ -1456,12 +1446,10 @@ invalid_buffer:
 
 static gboolean
 setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
-    GstVspFilterDeviceInfo * device, gint stride[VIDEO_MAX_PLANES],
-    enum v4l2_memory io)
+    GstVspFilterDeviceInfo * device, enum v4l2_memory io)
 {
   enum v4l2_quantization quant;
   guint n_bufs = N_BUFFERS;
-  guint width, height;
 
   if (device->is_input_device &&
       space->input_color_range != GST_VSPFILTER_DEFAULT_COLOR_RANGE) {
@@ -1472,18 +1460,15 @@ setup_device (GstVspFilter * space, GstBufferPool * pool, GstVideoInfo * vinfo,
 
   /* When import external buffer, device size setting can be rounded down */
   if (device->is_input_device) {
-    width = round_down_width (vinfo->finfo, vinfo->width);
-    height = round_down_height (vinfo->finfo, vinfo->height);
-  } else {
-    width = vinfo->width;
-    height = vinfo->height;
+    vinfo->width = round_down_width (vinfo->finfo, vinfo->width);
+    vinfo->height = round_down_height (vinfo->finfo, vinfo->height);
   }
 
-  if (!set_format (device->fd, width, height, device->format, stride, NULL,
-          device->buftype, io, set_encoding (vinfo->colorimetry.matrix),
-          quant)) {
+  if (!set_format (device->fd, vinfo->width, vinfo->height, device->format,
+          vinfo->stride, NULL, device->buftype, io,
+          set_encoding (vinfo->colorimetry.matrix), quant)) {
     GST_ERROR_OBJECT (space, "set_format for %s failed (%dx%d)",
-        buftype_str (device->buftype), width, height);
+        buftype_str (device->buftype), vinfo->width, vinfo->height);
     return FALSE;
   }
 
@@ -1540,15 +1525,27 @@ start_transform_device (GstVspFilter * space, GstBufferPool * pool,
 }
 
 static gboolean
+video_info_update_from_meta (GstVideoInfo * vinfo, GstVideoMeta * vmeta)
+{
+  int i;
+  if (!vmeta)
+    return TRUE;
+
+  if (vmeta->n_planes != GST_VIDEO_INFO_N_PLANES (vinfo))
+    return FALSE;
+
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++) {
+    vinfo->stride[i] = vmeta->stride[i];
+    vinfo->offset[i] = vmeta->offset[i];
+  }
+  return TRUE;
+}
+
+static gboolean
 init_transform_device (GstVspFilter * space, GstVspFilterDeviceInfo * dev,
     GstBuffer * buf, GstVideoInfo * vinfo, enum v4l2_memory io,
     GstBufferPool * pool)
 {
-  gint i;
-
-  for (i = 0; i < dev->n_planes; i++)
-    dev->strides[i] = get_stride (buf, vinfo, i);
-
   dev->io = io;
 
   if ((buf->pool != pool) && (gst_buffer_pool_is_active (pool))) {
@@ -1557,7 +1554,7 @@ init_transform_device (GstVspFilter * space, GstVspFilterDeviceInfo * dev,
   }
 
   if (!gst_buffer_pool_is_active (pool) &&
-      !setup_device (space, pool, vinfo, dev, (gint *)dev->strides, io))
+      !setup_device (space, pool, vinfo, dev, io))
     return FALSE;
 
   return TRUE;
@@ -1578,7 +1575,7 @@ setup_v4l2_buffer_userptr (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
     return GST_FLOW_ERROR;
   }
 
-  for (i = 0; i < dev->n_planes; i++) {
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++) {
     struct v4l2_plane *plane = &v4l2_buf->m.planes[i];
     guint comp_stride = GST_VIDEO_FRAME_COMP_STRIDE (dest_frame, i);
     guint comp_height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, i);
@@ -1621,6 +1618,10 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     GstVideoInfo *vinfo = vinfos[i];
     struct v4l2_buffer v4l2_buf = { 0, };
     struct v4l2_plane planes[GST_VIDEO_MAX_PLANES] = { 0, };
+    GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
+
+    if (!video_info_update_from_meta (vinfo, vmeta))
+      goto transform_exit;
 
     v4l2_buf.m.planes = planes;
 
@@ -1668,7 +1669,7 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
             &userptr_frame);
         break;
       case V4L2_MEMORY_MMAP:
-        setup_v4l2_buffer_mmap (space, &v4l2_buf, buf, dev);
+        setup_v4l2_buffer_mmap (space, &v4l2_buf, buf, dev, vinfo);
         break;
       case V4L2_MEMORY_DMABUF:
         setup_v4l2_buffer_dmabuf (space, &v4l2_buf, buf, dev, vinfo);

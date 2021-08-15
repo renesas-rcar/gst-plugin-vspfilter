@@ -122,7 +122,6 @@ struct _GstVspFilterDeviceInfo
   guint captype;
   enum v4l2_buf_type buftype;
   enum v4l2_memory io;
-  guint strides[GST_VIDEO_MAX_PLANES];
 
   GstBufferPool *pool;
   GstVspfilterIOMode io_mode;
