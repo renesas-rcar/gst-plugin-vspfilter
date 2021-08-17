@@ -118,7 +118,6 @@ struct _GstVspFilterDeviceInfo
   gint fd;
 
   guint format;
-  guint n_planes;
   guint captype;
   enum v4l2_buf_type buftype;
   enum v4l2_memory io;

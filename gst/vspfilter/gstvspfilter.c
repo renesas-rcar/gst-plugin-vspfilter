@@ -1539,21 +1539,6 @@ wait_output_ready (GstVspFilter * space)
 }
 
 static gboolean
-start_transform_device (GstVspFilter * space, GstBufferPool * pool,
-    GstVspFilterDeviceInfo * device, struct v4l2_buffer *v4l2_buf)
-{
-  v4l2_buf->length = device->n_planes;
-  v4l2_buf->type = device->buftype;
-
-  if (queue_buffer (space, device, v4l2_buf)) {
-    GST_ERROR_OBJECT (space, "Failed to queue_buffer for %s", device->name);
-    return FALSE;
-  }
-
-  return TRUE;
-}
-
-static gboolean
 video_info_update_from_meta (GstVideoInfo * vinfo, GstVideoMeta * vmeta)
 {
   int i;
@@ -1718,13 +1703,13 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     }
 
     v4l2_buf.memory = dev->io;
+    v4l2_buf.length = GST_VIDEO_INFO_N_PLANES (vinfo);
+    v4l2_buf.type = dev->buftype;
 
-    if (!start_transform_device (space, pool, dev, &v4l2_buf)) {
-      GST_ERROR_OBJECT (space, "start_transform_device for %s failed",
-          dev->name);
+    if (queue_buffer (space, dev, &v4l2_buf)) {
+      GST_ERROR_OBJECT (space, "Failed to queue_buffer for %s", dev->name);
       goto transform_exit;
     }
-
   }
 
   if (!space->vsp_info->is_stream_started) {
@@ -1827,7 +1812,7 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
       goto pool_setup_failed;
 
     ret = set_colorspace (vinfo[i].finfo->format, &space->devices[i].format,
-        &code[i], &space->devices[i].n_planes);
+        &code[i], NULL);
     if (ret < 0) {
       GST_ERROR_OBJECT (space, "set_colorspace() failed");
       return FALSE;
@@ -2145,7 +2130,7 @@ dequeue_buffer (GstVspFilter * space, GstVspFilterDeviceInfo * device)
 
   buf.type = device->buftype;
   buf.memory = device->io;
-  buf.length = device->n_planes;
+  buf.length = GST_VIDEO_MAX_PLANES;
   buf.m.planes = planes;
 
   if (-1 == xioctl (device->fd, VIDIOC_DQBUF, &buf)) {
