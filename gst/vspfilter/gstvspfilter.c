@@ -1311,17 +1311,6 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
       query);
 }
 
-static inline gint
-get_stride (GstBuffer * buffer, GstVideoInfo * vinfo, gint plane_index)
-{
-  GstVideoMeta *meta;
-
-  meta = gst_buffer_get_video_meta (buffer);
-  return (meta) ?
-      GST_VIDEO_FORMAT_INFO_STRIDE (vinfo->finfo, meta->stride, plane_index) :
-      vinfo->stride[plane_index];
-}
-
 static void
 gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
     GstVideoFrame * src_frame, GstVideoInfo * vinfo)
@@ -1339,8 +1328,8 @@ gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
         GST_VIDEO_FRAME_COMP_PSTRIDE (dest_frame, i);
     height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, i);
 
-    ss = get_stride (src_frame->buffer, vinfo, i);
-    ds = get_stride (dest_frame->buffer, vinfo, i);
+    ss = GST_VIDEO_FRAME_PLANE_STRIDE (src_frame, i);
+    ds = GST_VIDEO_FRAME_PLANE_STRIDE (dest_frame, i);
 
     for (j = 0; j < height; j++) {
       memcpy (dp, sp, width);
