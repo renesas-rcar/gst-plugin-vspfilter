@@ -62,7 +62,8 @@ enum
   PROP_VSP_DEVFILE_OUTPUT,
   PROP_INPUT_IO_MODE,
   PROP_OUTPUT_IO_MODE,
-  PROP_INPUT_COLOR_RANGE
+  PROP_INPUT_COLOR_RANGE,
+  PROP_DISABLE_PASSTHROUGH
 };
 
 #define CSP_VIDEO_CAPS \
@@ -1781,6 +1782,9 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   fclass = GST_VIDEO_FILTER_GET_CLASS (filter);
   vsp_info = space->vsp_info;
 
+  if (space->disable_passthrough)
+    gst_base_transform_set_passthrough (trans, FALSE);
+
   caps[OUT_DEV] = incaps;
   caps[CAP_DEV] = outcaps;
 
@@ -1965,6 +1969,12 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
           GST_TYPE_VSPFILTER_COLOR_RANGE, DEFAULT_PROP_COLOR_RANGE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_DISABLE_PASSTHROUGH,
+      g_param_spec_boolean ("disable-passthrough", "Disable passthrough mode",
+          "Force vspfilter to process all buffers, even if input and output "
+          "caps are the same", DEFAULT_PROP_DISABLE_PASSTHROUGH,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&gst_vsp_filter_src_template));
   gst_element_class_add_pad_template (gstelement_class,
@@ -2066,6 +2076,9 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
     case PROP_INPUT_COLOR_RANGE:
       space->input_color_range = g_value_get_enum (value);
       break;
+    case PROP_DISABLE_PASSTHROUGH:
+      space->disable_passthrough = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -2095,6 +2108,9 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
       break;
     case PROP_INPUT_COLOR_RANGE:
       g_value_set_enum (value, space->input_color_range);
+      break;
+    case PROP_DISABLE_PASSTHROUGH:
+      g_value_set_boolean (value, space->disable_passthrough);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);

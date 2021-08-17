@@ -55,6 +55,7 @@ G_BEGIN_DECLS
 #define VSP_CONF_ITEM_OUTPUT "output-device-name="
 #define DEFAULT_PROP_VSP_DEVFILE_INPUT "/dev/video0"
 #define DEFAULT_PROP_VSP_DEVFILE_OUTPUT "/dev/video1"
+#define DEFAULT_PROP_DISABLE_PASSTHROUGH 0
 #define RESIZE_DEVICE_NAME "uds.0"
     typedef enum
 {
@@ -143,6 +144,7 @@ struct _GstVspFilter
   GstVspFilterVspInfo *vsp_info;
   GstVspFilterDeviceInfo devices[MAX_DEVICES];
   GstVspfilterColorRange input_color_range;
+  gboolean disable_passthrough;
   GHashTable *hash_t;
 };
 
