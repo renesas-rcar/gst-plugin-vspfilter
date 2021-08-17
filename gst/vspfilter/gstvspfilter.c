@@ -1167,13 +1167,32 @@ gst_vsp_filter_change_state (GstElement * element, GstStateChange transition)
   return ret;
 }
 
-static GstBufferPool *
-gst_vsp_filter_setup_pool (GstVspFilterDeviceInfo * device, GstCaps * caps,
-    gsize size, guint num_buf)
+static gboolean
+gst_vsp_filter_configure_device_pool (GstVspFilterDeviceInfo * device,
+    GstCaps * caps, gsize size, guint num_buf)
 {
   GstBufferPool *pool;
   GstStructure *structure;
   guint buf_cnt = MAX (3, num_buf);
+
+  if (device->pool) {
+    GstCaps *pool_caps;
+    GstStructure *config;
+
+    config = gst_buffer_pool_get_config (device->pool);
+    gst_buffer_pool_config_get_params (config, &pool_caps, NULL, NULL, NULL);
+    gst_structure_free (config);
+
+    /* reuse existing pool if the caps haven't changed */
+    if (gst_caps_is_equal (caps, pool_caps))
+      return TRUE;
+
+    if (!vspfilter_buffer_pool_orphan_pool (device->pool))
+      return FALSE;
+
+    gst_object_unref (device->pool);
+    device->pool = NULL;
+  }
 
   pool = vspfilter_buffer_pool_new (device->fd, device->buftype);
 
@@ -1183,10 +1202,12 @@ gst_vsp_filter_setup_pool (GstVspFilterDeviceInfo * device, GstCaps * caps,
   gst_buffer_pool_config_set_params (structure, caps, size, buf_cnt, buf_cnt);
   if (!gst_buffer_pool_set_config (pool, structure)) {
     gst_object_unref (pool);
-    return NULL;
+    return FALSE;
   }
 
-  return pool;
+  device->pool = pool;
+
+  return TRUE;
 }
 
 /* configure the allocation query that was answered downstream, we can configure
@@ -1250,9 +1271,8 @@ gst_vsp_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     GST_DEBUG_OBJECT (space, "create new pool, min buffers=%d, max buffers=%d",
         min, max);
     size = MAX (vinfo.size, size);
-    space->devices[CAP_DEV].pool =
-        gst_vsp_filter_setup_pool (&space->devices[CAP_DEV], caps, size, min);
-    if (!space->devices[CAP_DEV].pool) {
+    if (!gst_vsp_filter_configure_device_pool (&space->devices[CAP_DEV], caps,
+            size, min)) {
       GST_ERROR_OBJECT (space, "failed to setup pool");
       return FALSE;
     }
@@ -1788,7 +1808,6 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
 
   for (i = 0; i < MAX_DEVICES; i++) {
     GstStructure *structure;
-    GstBufferPool *newpool;
 
     if (!gst_video_info_from_caps (&vinfo[i], caps[i]))
       goto invalid_caps;
@@ -1803,19 +1822,9 @@ gst_vsp_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
         !stop_capturing (space, &space->devices[i]))
       return FALSE;
 
-    if (space->devices[i].pool) {
-      if (!vspfilter_buffer_pool_orphan_pool (space->devices[i].pool))
-        return FALSE;
-    }
-
-    newpool = gst_vsp_filter_setup_pool (&space->devices[i],
-        caps[i], vinfo[i].size, 0);
-    if (!newpool)
+    if (!gst_vsp_filter_configure_device_pool (&space->devices[i],
+            caps[i], vinfo[i].size, 0))
       goto pool_setup_failed;
-
-    gst_object_replace ((GstObject **) & space->devices[i].pool,
-        (GstObject *) newpool);
-    gst_object_unref (newpool);
 
     ret = set_colorspace (vinfo[i].finfo->format, &space->devices[i].format,
         &code[i], &space->devices[i].n_planes);
@@ -1878,6 +1887,9 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   GstVspFilter *space;
   GstBufferPool *pool;
   GstStructure *config;
+  GstCaps *caps;
+  GstVideoInfo vinfo;
+
   guint min, size;
 
   space = GST_VSP_FILTER_CAST (trans);
@@ -1890,22 +1902,15 @@ gst_vsp_filter_propose_allocation (GstBaseTransform * trans,
   if (decide_query == NULL)
     return TRUE;
 
-  if (!space->devices[OUT_DEV].pool) {
-    GstCaps *caps;
-    GstVideoInfo vinfo;
+  gst_query_parse_allocation (query, &caps, NULL);
+  gst_video_info_init (&vinfo);
+  gst_video_info_from_caps (&vinfo, caps);
 
-    gst_query_parse_allocation (query, &caps, NULL);
-    gst_video_info_init (&vinfo);
-    gst_video_info_from_caps (&vinfo, caps);
-
-    GST_DEBUG_OBJECT (space, "create new pool");
-    space->devices[OUT_DEV].pool =
-        gst_vsp_filter_setup_pool (&space->devices[OUT_DEV],
-        caps, vinfo.size, 0);
-    if (!space->devices[OUT_DEV].pool) {
-      GST_ERROR_OBJECT (space, "failed to setup pool");
-      return FALSE;
-    }
+  GST_DEBUG_OBJECT (space, "create new pool");
+  if (!gst_vsp_filter_configure_device_pool (&space->devices[OUT_DEV],
+          caps, vinfo.size, 0)) {
+    GST_ERROR_OBJECT (space, "failed to setup pool");
+    return FALSE;
   }
 
   pool = gst_object_ref (space->devices[OUT_DEV].pool);
