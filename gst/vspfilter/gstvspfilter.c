@@ -820,7 +820,6 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
   guint in_sink_width, in_sink_height;
   guint in_src_width, in_src_height;
   GstVspFilterEntityInfo *out_ent, *cap_ent;
-  struct v4l2_format fmt;
 
   vsp_info = space->vsp_info;
 
@@ -834,18 +833,13 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
   out_ent = &space->devices[OUT_DEV].ventity;
   cap_ent = &space->devices[CAP_DEV].ventity;
 
-  CLEAR (fmt);
-
-  fmt.type = space->devices[OUT_DEV].buftype;
-
-  if (-1 == xioctl (space->devices[OUT_DEV].fd, VIDIOC_G_FMT, &fmt)) {
-    GST_ERROR ("VIDIOC_G_FMT for %s failed.",
-        buftype_str (space->devices[OUT_DEV].buftype));
+  /* Get the current input size set on the input device as it may not be
+     the same as the value that was used to set the format */
+  if (!get_fmt_window_size (space->devices[OUT_DEV].fd,
+          space->devices[OUT_DEV].buftype, &in_sink_width, &in_sink_height)) {
+    GST_ERROR_OBJECT (space, "Cannot get current input buffer formnat");
     return FALSE;
   }
-
-  in_sink_width = fmt.fmt.pix_mp.width;
-  in_sink_height = fmt.fmt.pix_mp.height;
 
   /*in case odd size of yuv buffer, separate buffer and image size */
   in_src_width = round_down_width (in_finfo, in_width);

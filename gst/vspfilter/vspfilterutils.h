@@ -61,5 +61,7 @@ gboolean set_format (gint fd, guint width, guint height, guint format,
     enum v4l2_ycbcr_encoding encoding, enum v4l2_quantization quant);
 gboolean request_buffers (gint fd, enum v4l2_buf_type buftype, guint * n_bufs,
     enum v4l2_memory io);
+gboolean get_fmt_window_size(gint fd, enum v4l2_buf_type type, guint *width,
+    guint *height);
 
 #endif /*__GST_VSPFILTER_UTILS_H__*/

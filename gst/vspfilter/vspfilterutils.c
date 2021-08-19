@@ -292,3 +292,26 @@ set_format (gint fd, guint width, guint height, guint format,
 
   return TRUE;
 }
+
+gboolean
+get_fmt_window_size(gint fd, enum v4l2_buf_type type, guint *width, guint *height)
+{
+  struct v4l2_format fmt;
+
+  CLEAR (fmt);
+
+  fmt.type = type;
+
+  if (-1 == xioctl (fd, VIDIOC_G_FMT, &fmt)) {
+    GST_ERROR ("VIDIOC_G_FMT for %s failed.", buftype_str (type));
+    return FALSE;
+  }
+
+  if (*width)
+    *width = fmt.fmt.pix_mp.width;
+
+  if (*height)
+    *height = fmt.fmt.pix_mp.height;
+
+  return TRUE;
+}
