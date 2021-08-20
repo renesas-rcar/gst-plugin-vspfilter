@@ -1320,6 +1320,8 @@ gst_vsp_filter_copy_frame (GstVideoFrame * dest_frame,
   gint ss, ds;
   gint i, j;
 
+  /* Use GST_VIDEO_FRAME_COMP_ macros to get PLANE sizes, since
+     the values are the same for every component id <= plane id. */
   for (i = 0; i < GST_VIDEO_FRAME_N_PLANES (src_frame); i++) {
     sp = src_frame->data[i];
     dp = dest_frame->data[i];
@@ -1587,7 +1589,9 @@ setup_v4l2_buffer_userptr (GstVspFilter * space, struct v4l2_buffer *v4l2_buf,
     return GST_FLOW_ERROR;
   }
 
-  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++) {
+  /* Use GST_VIDEO_FRAME_COMP_ macros to get PLANE sizes, since
+     the values are the same for every component id <= plane id. */
+  for (i = 0; i < GST_VIDEO_FRAME_N_PLANES (dest_frame); i++) {
     struct v4l2_plane *plane = &v4l2_buf->m.planes[i];
     guint comp_stride = GST_VIDEO_FRAME_COMP_STRIDE (dest_frame, i);
     guint comp_height = GST_VIDEO_FRAME_COMP_HEIGHT (dest_frame, i);
