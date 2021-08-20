@@ -816,7 +816,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
 {
   GstVspFilterVspInfo *vsp_info;
   const GstVideoFormatInfo *in_finfo;
-  gint in_width, in_height, out_width, out_height;
+  gint in_width, in_height, output_width, output_height;
   guint in_sink_width, in_sink_height;
   guint in_src_width, in_src_height;
   GstVspFilterEntityInfo *out_ent, *cap_ent;
@@ -825,13 +825,8 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
 
   in_width = in_info->width;
   in_height = in_info->height;
-  out_width = out_info->width;
-  out_height = out_info->height;
-
-  in_finfo = gst_video_format_get_info (in_info->finfo->format);
 
   out_ent = &space->devices[OUT_DEV].ventity;
-  cap_ent = &space->devices[CAP_DEV].ventity;
 
   /* Get the current input size set on the input device as it may not be
      the same as the value that was used to set the format */
@@ -842,6 +837,7 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
   }
 
   /*in case odd size of yuv buffer, separate buffer and image size */
+  in_finfo = gst_video_format_get_info (in_info->finfo->format);
   in_src_width = round_down_width (in_finfo, in_width);
   in_src_height = round_down_height (in_finfo, in_height);
 
@@ -857,8 +853,12 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
     return FALSE;
   }
 
-  if (!set_vsp_entity (space, cap_ent, out_width,
-          out_height, out_width, out_height)) {
+  output_width = out_info->width;
+  output_height = out_info->height;
+  cap_ent = &space->devices[CAP_DEV].ventity;
+
+  if (!set_vsp_entity (space, cap_ent, output_width,
+          output_height, output_width, output_height)) {
     GST_ERROR_OBJECT (space, "Failed to set_vsp_entity for %s", cap_ent->name);
     return FALSE;
   }
@@ -867,9 +867,9 @@ set_vsp_entities (GstVspFilter * space, GstVideoInfo * in_info,
   deactivate_link (space, &out_ent->entity);
 
   /* link up entities for VSP1 V4L2 */
-  if ((in_src_width != out_width) || (in_src_height != out_height)) {
+  if ((in_src_width != output_width) || (in_src_height != output_height)) {
     if (!setup_resize_device (space, out_ent, cap_ent, in_src_width,
-            in_src_height, out_width, out_height))
+            in_src_height, output_width, output_height))
       return FALSE;
   } else {
     if (vsp_info->is_resz_device_initialized)
