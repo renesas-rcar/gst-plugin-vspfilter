@@ -1694,13 +1694,8 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     GstVideoInfo *vinfo = gst_video_info_copy(vinfos[i]);
     struct v4l2_buffer v4l2_buf = { 0, };
     struct v4l2_plane planes[GST_VIDEO_MAX_PLANES] = { 0, };
-    GstVideoMeta *vmeta = gst_buffer_get_video_meta (buf);
+    GstVideoMeta *vmeta;
     GstVideoCropMeta *crop_meta = gst_buffer_get_video_crop_meta (buf);
-
-    if (vmeta) {
-      vinfo->width = vmeta->width;
-      vinfo->height = vmeta->height;
-    }
 
     if (crop_meta) {
       dev->crop.left = crop_meta->x;
@@ -1729,6 +1724,12 @@ gst_vsp_filter_transform (GstBaseTransform * trans, GstBuffer * inbuf,
     }
     if (ret != GST_FLOW_OK)
       goto transform_exit;
+
+    vmeta = gst_buffer_get_video_meta (buf);
+    if (vmeta) {
+      vinfo->width = vmeta->width;
+      vinfo->height = vmeta->height;
+    }
 
     if (!space->vsp_info->is_stream_started &&
         !init_transform_device (space, dev, buf, vinfo, v4l2_buf.memory, pool))
