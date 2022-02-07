@@ -307,10 +307,10 @@ get_fmt_window_size(gint fd, enum v4l2_buf_type type, guint *width, guint *heigh
     return FALSE;
   }
 
-  if (*width)
+  if (width)
     *width = fmt.fmt.pix_mp.width;
 
-  if (*height)
+  if (height)
     *height = fmt.fmt.pix_mp.height;
 
   return TRUE;
