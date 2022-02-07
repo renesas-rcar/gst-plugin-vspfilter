@@ -66,6 +66,24 @@ enum
   PROP_DISABLE_PASSTHROUGH
 };
 
+static inline gpointer g_memdup_wrap(gconstpointer mem, gsize byte_size) {
+#if GLIB_CHECK_VERSION(2, 67, 4)
+    return g_memdup2(mem, byte_size);
+#else
+    gpointer new_mem;
+
+    if (mem && byte_size != 0) {
+        new_mem = g_malloc(byte_size);
+        memcpy(new_mem, mem, byte_size);
+    } else {
+        new_mem = NULL;
+    }
+
+    return new_mem;
+#endif
+}
+
+
 #define CSP_VIDEO_CAPS \
     "video/x-raw, " \
         "format = (string) {I420, NV12, NV21, NV16, UYVY, YUY2}," \
@@ -531,7 +549,7 @@ get_media_entities (GstVspFilter * space)
     if ((ret < 0) && (errno == EINVAL))
       break;
 
-    ent_d = g_memdup (&entity, sizeof (struct media_entity_desc));
+    ent_d = g_memdup_wrap (&entity, sizeof (struct media_entity_desc));
     g_hash_table_replace (space->hash_t, ent_d->name, ent_d);
   }
 }
