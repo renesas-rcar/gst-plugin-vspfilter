@@ -1,5 +1,5 @@
 project('gst-vspfilter', 'c',
-  version : '1.0.3',
+  version : '1.0.4',
   meson_version : '>= 0.48',
   default_options : [ 'warning_level=1',
                       'werror=true',
