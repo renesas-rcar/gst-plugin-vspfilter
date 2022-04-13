@@ -63,7 +63,8 @@ enum
   PROP_INPUT_IO_MODE,
   PROP_OUTPUT_IO_MODE,
   PROP_INPUT_COLOR_RANGE,
-  PROP_DISABLE_PASSTHROUGH
+  PROP_DISABLE_PASSTHROUGH,
+  PROP_OUTPUT_ALIGNMENT,
 };
 
 static inline gpointer
@@ -1195,6 +1196,7 @@ gst_vsp_filter_configure_device_pool (GstVspFilterDeviceInfo * device,
   GstBufferPool *pool;
   GstStructure *structure;
   guint buf_cnt = MAX (3, num_buf);
+  guint align;
 
   if (device->pool) {
     GstCaps *pool_caps;
@@ -1221,6 +1223,17 @@ gst_vsp_filter_configure_device_pool (GstVspFilterDeviceInfo * device,
   /*We don't support dynamically allocating buffers, so set the max buffer
      count to be the same as the min buffer count */
   gst_buffer_pool_config_set_params (structure, caps, size, buf_cnt, buf_cnt);
+  /* Ensure that the buffer alighment is a valid value */
+
+  align = device->align.stride_align[0];
+  /* check that align is a power of two */
+  if (align & (align + 1)) {
+    GST_ERROR ("Invalid output alignment value: %d. Must be a power of two.",
+            align);
+    return FALSE;
+  }
+  gst_buffer_pool_config_set_video_alignment (structure, &device->align);
+
   if (!gst_buffer_pool_set_config (pool, structure)) {
     gst_object_unref (pool);
     return FALSE;
@@ -1995,6 +2008,12 @@ gst_vsp_filter_class_init (GstVspFilterClass * klass)
           "caps are the same", DEFAULT_PROP_DISABLE_PASSTHROUGH,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_OUTPUT_ALIGNMENT,
+      g_param_spec_int ("output-alignment", "Align output buffer pitch",
+          "Align the output buffer stride to be a multiple of <n> (power of 2) bytes.",
+          DEFUALT_OUTPUT_ALIGNMENT, INT_MAX, DEFUALT_OUTPUT_ALIGNMENT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&gst_vsp_filter_src_template));
   gst_element_class_add_pad_template (gstelement_class,
@@ -2099,6 +2118,14 @@ gst_vsp_filter_set_property (GObject * object, guint property_id,
     case PROP_DISABLE_PASSTHROUGH:
       space->disable_passthrough = g_value_get_boolean (value);
       break;
+    case PROP_OUTPUT_ALIGNMENT:
+    {
+      int align = g_value_get_int (value);
+
+      for (int i = 0; i < GST_VIDEO_MAX_PLANES; i++)
+        space->devices[CAP_DEV].align.stride_align[i] = align - 1;
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -2131,6 +2158,9 @@ gst_vsp_filter_get_property (GObject * object, guint property_id,
       break;
     case PROP_DISABLE_PASSTHROUGH:
       g_value_set_boolean (value, space->disable_passthrough);
+      break;
+    case PROP_OUTPUT_ALIGNMENT:
+      g_value_set_int (value, space->devices[CAP_DEV].align.stride_align[0] + 1);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);

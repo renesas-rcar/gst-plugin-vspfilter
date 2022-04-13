@@ -185,6 +185,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   GstStructure *st;
   gint i;
   guint bufsize = 0;
+  GstVideoAlignment align;
 
   if (!gst_buffer_pool_config_get_params (config, &caps, NULL, &min, &max)) {
     GST_ERROR_OBJECT (self, "Failed to get config params");
@@ -227,6 +228,13 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   }
 
   memset (self->stride, 0, sizeof (self->stride));
+
+  gst_buffer_pool_config_get_video_alignment (config, &align);
+  gst_video_info_align (vinfo, &align);
+  if (align.stride_align[0] != 0) {
+    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++)
+      self->stride[i] = vinfo->stride[i];
+  }
 
   if (!setup_format (bpool, pix_fmt, V4L2_MEMORY_MMAP, vinfo,
           self->stride, self->size,

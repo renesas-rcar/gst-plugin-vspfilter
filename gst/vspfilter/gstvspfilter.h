@@ -56,6 +56,7 @@ G_BEGIN_DECLS
 #define DEFAULT_PROP_VSP_DEVFILE_INPUT "/dev/video0"
 #define DEFAULT_PROP_VSP_DEVFILE_OUTPUT "/dev/video1"
 #define DEFAULT_PROP_DISABLE_PASSTHROUGH 0
+#define DEFUALT_OUTPUT_ALIGNMENT 0
 #define RESIZE_DEVICE_NAME "uds.0"
     typedef enum
 {
@@ -130,6 +131,8 @@ struct _GstVspFilterDeviceInfo
 
   gboolean is_input_device;
   gboolean copy_mode;
+
+  GstVideoAlignment align;
 };
 
 /**
