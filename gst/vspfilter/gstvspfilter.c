@@ -66,20 +66,22 @@ enum
   PROP_DISABLE_PASSTHROUGH
 };
 
-static inline gpointer g_memdup_wrap(gconstpointer mem, gsize byte_size) {
+static inline gpointer
+g_memdup_wrap (gconstpointer mem, gsize byte_size)
+{
 #if GLIB_CHECK_VERSION(2, 67, 4)
-    return g_memdup2(mem, byte_size);
+  return g_memdup2 (mem, byte_size);
 #else
-    gpointer new_mem;
+  gpointer new_mem;
 
-    if (mem && byte_size != 0) {
-        new_mem = g_malloc(byte_size);
-        memcpy(new_mem, mem, byte_size);
-    } else {
-        new_mem = NULL;
-    }
+  if (mem && byte_size != 0) {
+    new_mem = g_malloc (byte_size);
+    memcpy (new_mem, mem, byte_size);
+  } else {
+    new_mem = NULL;
+  }
 
-    return new_mem;
+  return new_mem;
 #endif
 }
 

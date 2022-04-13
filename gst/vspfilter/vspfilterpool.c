@@ -136,7 +136,7 @@ vspfilter_buffer_pool_get_buffer_index (GstBuffer * buffer)
 }
 
 static gboolean
-vspfilter_buffer_pool_release_buffers(VspfilterBufferPool * self)
+vspfilter_buffer_pool_release_buffers (VspfilterBufferPool * self)
 {
   guint n_reqbufs = 0;
 
@@ -161,14 +161,14 @@ vspfilter_buffer_pool_orphan_pool (GstBufferPool * bpool)
 
   VspfilterBufferPool *self = VSPFILTER_BUFFER_POOL_CAST (bpool);
 
-  gst_buffer_pool_set_active(bpool, FALSE);
+  gst_buffer_pool_set_active (bpool, FALSE);
 
-  GST_OBJECT_LOCK(bpool);
+  GST_OBJECT_LOCK (bpool);
 
-  if ((ret = vspfilter_buffer_pool_release_buffers(self)))
+  if ((ret = vspfilter_buffer_pool_release_buffers (self)))
     self->orphaned = TRUE;
 
-  GST_OBJECT_UNLOCK(bpool);
+  GST_OBJECT_UNLOCK (bpool);
 
   return ret;
 }
@@ -220,7 +220,7 @@ vspfilter_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   }
 
   if (self->exported) {
-    if (!vspfilter_buffer_pool_release_buffers(self))
+    if (!vspfilter_buffer_pool_release_buffers (self))
       return FALSE;
     g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
     self->exported = NULL;
@@ -278,19 +278,19 @@ vspfilter_buffer_pool_stop (GstBufferPool * bpool)
     stop_success = FALSE;
   }
 
-  GST_OBJECT_LOCK(self);
+  GST_OBJECT_LOCK (self);
   if (!self->orphaned) {
 
     if (-1 == xioctl (self->fd, VIDIOC_STREAMOFF, &self->buftype)) {
-        GST_ERROR_OBJECT (self, "streamoff for %s failed",
-            buftype_str (self->buftype));
-        stop_success = FALSE;
+      GST_ERROR_OBJECT (self, "streamoff for %s failed",
+          buftype_str (self->buftype));
+      stop_success = FALSE;
     }
 
-    if (!vspfilter_buffer_pool_release_buffers(self))
-        stop_success = FALSE;
+    if (!vspfilter_buffer_pool_release_buffers (self))
+      stop_success = FALSE;
   }
-  GST_OBJECT_UNLOCK(self);
+  GST_OBJECT_UNLOCK (self);
 
   g_slice_free1 (sizeof (gboolean) * self->n_buffers, self->exported);
   self->exported = NULL;
@@ -320,12 +320,12 @@ vspfilter_buffer_pool_alloc_buffer (GstBufferPool * bpool, GstBuffer ** buffer,
   /* Orphaned pools can't allocate new buffers. They can only free already
    * allocated ones and shut down */
 
-  GST_OBJECT_LOCK(self);
+  GST_OBJECT_LOCK (self);
   if (self->orphaned) {
-    GST_OBJECT_UNLOCK(self);
+    GST_OBJECT_UNLOCK (self);
     return GST_FLOW_ERROR;
   }
-  GST_OBJECT_UNLOCK(self);
+  GST_OBJECT_UNLOCK (self);
 
   for (i = 0; i < self->n_buffers; i++) {
     if (!self->exported[i]) {
