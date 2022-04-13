@@ -79,7 +79,7 @@ vspfilter_buffer_pool_get_size (GstBufferPool * bpool)
   return self->size;
 }
 
-gboolean
+static gboolean
 setup_format (GstBufferPool * bpool, guint pix_fmt,
     enum v4l2_memory io, GstVideoInfo * vinfo,
     gint stride[GST_VIDEO_MAX_PLANES], gint size[GST_VIDEO_MAX_PLANES],
